@@ -1,9 +1,7 @@
-# Cluster scratch — symlink to /data/user_data/anshulk/emnlp2026 (51 GB of
-# model weights, activations, intermediate results). Track plots under
-# data/figures/ only; exclude everything else under data/.
-data/*
-!data/figures/
-!data/figures/**
+# Cluster scratch — symlink to /data/user_data/anshulk/emnlp2026, contains
+# 51 GB of model weights, activations, intermediate results, and figures.
+# Never push.
+data/
 
 # Python
 __pycache__/
