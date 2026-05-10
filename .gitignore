@@ -1,0 +1,32 @@
+# Cluster scratch — symlink to /data/user_data/anshulk/emnlp2026, contains
+# 51 GB of model weights, activations, results, and figures. Never push.
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Local Claude Code workspace (per-project settings, not part of the project)
+.claude/
+
+# SLURM stdout/stderr if any leak into the repo root
+slurm-*.out
+slurm-*.err
+
+# Stray experiment artefacts
+*.npy
+*.pt
+*.pkl
+*.log

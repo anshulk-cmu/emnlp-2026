@@ -1,0 +1,74 @@
+# =============================================================================
+# EMNLP 2026 Pipeline Configuration
+# Project: From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in LMs
+# Rescope of /home/anshulk/arithmetic-geometry under plan v6.
+# =============================================================================
+
+paths:
+  workspace:    /home/anshulk/emnlp2026
+  data_root:    /data/user_data/anshulk/emnlp2026
+  models_root:  /data/user_data/anshulk/emnlp2026/models
+  results_root: /data/user_data/anshulk/emnlp2026/results
+  logs_root:    /data/user_data/anshulk/emnlp2026/logs
+
+env:
+  conda_env_name: geometry
+  conda_env_path: /data/user_data/anshulk/miniconda3/envs/geometry
+  python_bin:     /data/user_data/anshulk/miniconda3/envs/geometry/bin/python
+
+models:
+  - key: gpt-j-6b
+    name: GPT-J 6B
+    local_path: /data/user_data/anshulk/emnlp2026/models/gpt-j-6b
+    hf_repo: EleutherAI/gpt-j-6B
+    headline_layer: 14
+    layers: [4, 8, 14, 20, 24]
+  - key: llama-3.1-8b
+    name: Llama 3.1 8B
+    local_path: /data/user_data/anshulk/emnlp2026/models/llama-3.1-8b
+    hf_repo: meta-llama/Llama-3.1-8B
+    headline_layer: 16
+    layers: [4, 8, 16, 24, 28]
+  - key: pythia-6.9b
+    name: Pythia 6.9B
+    local_path: /data/user_data/anshulk/emnlp2026/models/pythia-6.9b
+    hf_repo: EleutherAI/pythia-6.9b
+    headline_layer: 16
+    layers: [4, 8, 16, 24, 28]
+
+dataset:
+  operand_range: [0, 99]                # a, b ∈ [0, 99] for both tasks (plan v6 §4)
+  prompts:
+    addition:       "Output ONLY a number. {a}+{b}="
+    multiplication: "Output ONLY a number. {a}*{b}="
+
+tokenization:
+  sweep_max: 10000                      # answers cover 0..198 (add) and 0..9801 (mult)
+  contexts:
+    - bare                              # tok(str(n))
+    - leading_space                     # tok(" " + str(n))
+    - post_equals                       # tok("=" + str(n))
+    - post_plus                         # tok("+" + str(n))
+    - post_star                         # tok("*" + str(n))
+    - kt_addition_full                  # tok(prompt_with_answer) - tok(prompt)
+    - kt_multiplication_full            # same with "*"
+
+storage:
+  activation_dtype: float32
+
+eval:
+  batch_size: 512                       # sized for A6000 ≥70% util on 6-8B models in bf16
+  min_batch_size: 64                    # OOM-fallback floor
+  max_new_tokens: 4                     # we only score first-token correctness
+  inference_dtype: bfloat16             # weights loaded in bf16
+
+ccsvd:
+  min_group_size: 30                    # plan v6 §7.4: drop concept values with < 30 samples
+  n_permutations: 1000                  # permutation null shuffles
+  perm_alpha: 0.01                      # p<0.01 ⇒ 99th percentile of null
+  cv_n_splits: 5                        # 5-fold subspace-preservation CV
+  random_state: 42
+  mean_centre: true
+  unit_normalise: false                 # do NOT unit-norm rows
+  centroid_weighting: "n_v"             # plan v6 spec: scale by sqrt(n_v / N)
+  n_jobs: 1                             # GPU SVD batching is the speed driver; loky workers contend for CUDA context
