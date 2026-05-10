@@ -17,8 +17,8 @@ A four-stage Bayesian pipeline that tests whether the geometric structure a line
 | 2 | Dataset generation | `generate_datasets.py` | ✓ done | [docs/02](docs/02_dataset_generation.md) | Addition 10,000 / Multiplication 3,023 (cross-model intersection); Tier 1–5 concept schema per problem |
 | 3 | Activation extraction | `eval_and_extract.py` | ✓ done | [docs/03](docs/03_eval_and_extract.md) | 30 `.npy` files (5 layers × 2 tasks × 3 models); SLURM array wall 79 s |
 | 4 | UMAP + t-SNE embeddings | `build_embeddings.py` | ✓ done | [docs/04](docs/04_umap_tsne_embeddings.md) | 30 per-cell CSVs + manifests under `data/results/embeddings/`. CPU-only, total wall 77.9 min. Trustworthiness ≥ 0.94 across all 30 cells |
-| 5 | CCSVD subspaces *(Stage 1 sub-step a)* | `ccsvd_subspaces.py` | ⏳ in progress | docs/05_ccsvd_subspaces.md (after run) | Per-cell basis, eigenvalue spectrum, 1,000-permutation null, 5-fold CV. ≈1,700 cells. SLURM array, 1 GPU per model |
-| 6 | LDA refinement *(Stage 1 sub-steps b + c)* | (next) | pending | — | `S_W` + generalised eigenvalue, λ_k ∈ [0,1], bootstrap CI on λ₁, Spearman cv_correlation |
+| 5 | CCSVD subspaces *(Stage 1 sub-step a)* | `ccsvd_subspaces.py` | ✓ done | [docs/05](docs/05_ccsvd_subspaces.md) | Per-cell basis, eigenvalue spectrum, 1,000-permutation null, 5-fold CV. ≈1,620 cells fit (~480 per model). |
+| 6 | Residualization + LDA refinement *(Stage 1 sub-steps b + c)* | `residualize_activations.py` + `ccsvd_subspaces.py --mode` + `lda_subspaces.py` | ⏳ submitted | docs/06_lda_subspaces.md (after run) | Three residualization modes (off / answer / norm) × two LDA placements (Option A in CCSVD subspace + Option B in full 4096-D with Ledoit–Wolf shrinkage). Dual significance: permutation null ∩ k-NN CV-accuracy. Cohen's d, bootstrap CI on λ_T_1, A↔B alignment. SLURM array, 1 GPU per model. |
 | 7 | Stage 2 — Bayesian manifold | (next) | pending | — | Centroid Fourier helix, d_SW, GPLVM, RBF-VAE |
 | 8 | Stage 3 — Ownership test | (next) | pending | — | Orthogonalisation against algebraic correlates; verdict ∈ {owned, inherited, ambiguous} |
 | 9 | Stage 4 — Causal ablation | (next) | pending | — | Δlogit on first answer token |
@@ -99,6 +99,45 @@ Per (model, task, layer, concept) cell on the correct subset:
 8. **5-fold subspace-preservation CV** — Pearson on pairwise centroid distances (full-space vs subspace).
 9. **Risk flags** — N/d inflation (N/r < 5), single-direction dominance (λ₁/λ₂ > 10), group imbalance (max n_v / min n_v > 3).
 
+---
+
+## 4b. Step 6 method — Residualization + LDA (Stage 1 sub-steps b + c)
+
+Step 6 layers two upgrades on Step 5:
+
+**(i) Residualization** — remove one global confounding direction from activations *before* CCSVD or LDA see them. Three modes run in parallel:
+- `off` — passthrough (no residualization). Reuses Step 5's CCSVD output verbatim.
+- `answer` — OLS-regress activations on the gold answer (`a+b` for addition, `a·b` for multiplication); keep residual. Mirrors the parent project's *product residualization*.
+- `norm` — OLS-regress activations on `||x||` (per-row L2 norm); keep residual. Removes the magnitude-of-activation confound.
+
+For non-`off` modes, **CCSVD is re-fit on the residualized activations** so the subspace basis is not contaminated by the very direction we removed. `mode=off` reuses the existing Step 5 output.
+
+**(ii) LDA refinement** — two placements per cell:
+- **Option A (headline)** — LDA in the CCSVD subspace (r ≤ ~18 directions). N/r ≈ 100+ → eigenvalues trustworthy. K×K compact form of the generalised eigenproblem `S_B w = λ_T S_T w`. λ_T ∈ [0, 1] reads as "fraction of variance that is between-class."
+- **Option B (audit)** — LDA in the full 4096-D residualized space, with **Ledoit–Wolf-style (OAS) shrinkage** on `S_T` (mandatory at d=4096, where N/d may be < 1 on multiplication × GPT-J). B's eigenvalue *magnitudes* are not cited — only directions and `n_sig` are. **Cosine similarity between A's and B's top direction is reported as a structural audit per cell.**
+
+**Significance — dual criterion** (n_sig = min(n_sig_perm, n_sig_cv)):
+- `n_sig_perm` — sequential 99th-percentile permutation null over 1,000 label shuffles (S_T's Cholesky is invariant under permutation, so we cache it once and reuse on GPU; per-shuffle cost is one cupy `solve_triangular` + a K×K eigh).
+- `n_sig_cv` — 5-fold stratified k-NN classification accuracy in the LDA-projected space, with the *one-SE rule* picking the largest k whose accuracy is within 1 SE of the maximum.
+- A direction is "real" only if both criteria agree.
+
+**Carve-outs.** `mode=answer` skips concepts named `ans_*` or `answer` (residualizing the answer onto an answer-derived label is circular). `mode=norm` skips `ans_magnitude_tier`. Carved cells are recorded explicitly in the per-cell `meta.json` and `comparison/carveout_log.csv`.
+
+**Cross-mode comparison.** After all three modes finish, `compare_residualization_modes.py` produces:
+- `cross_mode_summary.csv` — every cell with all three modes' n_sig / λ_T_1 / cv_accuracy side by side.
+- `cross_mode_alignment.csv` — pairwise top-1 cosine similarity (off↔answer, off↔norm, answer↔norm).
+- `cross_mode_lambda_deltas.csv` and `cross_mode_accuracy_deltas.csv` — pairwise deltas.
+- `matched_population_cells.csv` — only cells where Option A succeeded in **all three** modes (the headline comparison set).
+- `a_vs_b_alignment.csv` — concatenated A↔B alignment per cell × mode.
+
+**GPU acceleration.** Bottlenecks pushed to GPU via cupy + cuML:
+- OLS residualization (cupy)
+- CCSVD permutation null (existing Step 5 path, torch GPU SVD)
+- Full-space LDA's S_T builder (cupy OAS shrinkage)
+- Full-space LDA's permutation null (cupy `solve_triangular` reusing the cached lower-Cholesky factor)
+- 5-fold k-NN CV-accuracy (cuML `KNeighborsClassifier`)
+Sklearn / numpy fallback if cuML or cupy is unavailable on a node, with explicit log line.
+
 ### Concept registry (no concept subsampling — every CSV-grounded concept is fit)
 
 - **Tier 1** (digits): `a, b, answer, *_units, *_tens, ans_hundreds, ans_thousands, *_num_digits` (14 concepts)
@@ -131,17 +170,25 @@ emnlp2026/
 ├── build_embeddings.py              # Step 4 (UMAP + t-SNE per cell)
 ├── select_and_plot_embeddings.py    # Step 4 plotter (45 selected PNGs)
 │
-├── ccsvd_subspaces.py               # Step 5 (CCSVD)
+├── ccsvd_subspaces.py               # Step 5 + Step 6 (--mode flag for residualized re-fits)
 ├── check_ccsvd_toys.py              # Step 5 toy validation (1L / 2L / 3L)
 ├── run_ccsvd_subspaces.sbatch       # Step 5 SLURM array (1 A6000 per model)
 ├── plot_ccsvd_subspaces.py          # Step 5 plotter (10 plots × 3 models + 9 diagnostics)
+│
+├── residualize_activations.py       # Step 6 preprocessor (modes: off / answer / norm)
+├── lda_subspaces.py                 # Step 6 fitter — Option A (subspace) + Option B (full 4096-D) LDA
+├── check_lda_toys.py                # Step 6 toy validation (1L / 2L / 3L / 4L sample-starved)
+├── compare_residualization_modes.py # Step 6 cross-mode + A-vs-B aggregator
+├── run_step6.sbatch                 # Step 6 SLURM array — residualize → CCSVD re-fit → LDA, all 3 modes
+├── run_step6_aggregate.sbatch       # Step 6 dependent CPU job — cross-mode comparison
 │
 ├── docs/
 │   ├── 01_tokenization_limits.md
 │   ├── 02_dataset_generation.md
 │   ├── 03_eval_and_extract.md
 │   ├── 04_umap_tsne_embeddings.md
-│   └── 05_ccsvd_subspaces.md        # written after Step 5 completes
+│   ├── 05_ccsvd_subspaces.md
+│   └── 06_lda_subspaces.md          # written after Step 6 completes
 │
 └── data/                            # symlink → /data/user_data/anshulk/emnlp2026
     ├── models/                      # 51 GB
@@ -151,7 +198,12 @@ emnlp2026/
     ├── results/
     │   ├── tokenization_limits/
     │   ├── embeddings/              # Step 4
-    │   └── ccsvd_subspaces/         # Step 5
+    │   ├── ccsvd_subspaces/         # Step 5; Step 6 adds mode_answer/ and mode_norm/ subtrees
+    │   ├── residualized/            # Step 6 cache: {model}/{task}_layer_{LL}_mode_{mode}.npy
+    │   └── lda_subspaces/           # Step 6
+    │       ├── subspace_lda/mode_{off,answer,norm}/{model}/...   # Option A (headline)
+    │       ├── full_lda/mode_{off,answer,norm}/{model}/...       # Option B (audit)
+    │       └── comparison/                                        # cross-mode + A↔B CSVs
     ├── figures/
     │   ├── embeddings/              # Step 4 plots
     │   └── ccsvd/                   # Step 5 plots
@@ -201,6 +253,30 @@ python -c "import pandas as pd, glob; \
 python plot_ccsvd_subspaces.py --config config.yaml
 ```
 
+### Step 6 — Residualization + LDA (1 GPU per model, 3 modes per task)
+
+```bash
+# Toys first (synthetic 1L / 2L / 3L / 4L sanity check)
+python check_lda_toys.py
+
+# Smoke-test one cell (mode=off uses existing Step 5 CCSVD; ~44s/cell with GPU)
+python lda_subspaces.py --config config.yaml --model llama-3.1-8b \
+    --mode off --single-task addition --single-layer 16 --single-concept ans_units
+
+# Full sweep — main job + dependent aggregator (chained):
+JID=$(sbatch --parsable run_step6.sbatch)
+sbatch --dependency=afterok:$JID run_step6_aggregate.sbatch
+
+# Each main array task per model runs Phase 1 (residualize 90 files for that model),
+# Phase 2 (CCSVD re-fits for mode=answer and mode=norm), Phase 3 (LDA in both placements
+# A and B for all 3 modes). All on a single A6000.
+
+# Manual aggregation (if you want it before the dependent job runs):
+python compare_residualization_modes.py --config config.yaml
+```
+
+The pipeline writes plot-ready long-form CSVs (`eigenvalue_spectra_*`, `null_summary_*`, `cv_per_fold_*`, `cohen_d_*`, `bootstrap_lambda1_*` per mode and placement; `cross_mode_*`, `a_vs_b_alignment.csv`, `matched_population_cells.csv`, `carveout_log.csv` after aggregation).
+
 ---
 
 ## 7. Outputs and reproducibility
@@ -229,6 +305,42 @@ Under `data/results/ccsvd_subspaces/`:
 - `cv_per_fold.csv` — long-form per-fold CV
 - `run_manifest.json` — config sha, library versions, total runtime, cell counts by status
 
+### Per-cell artifacts (Step 6)
+
+Under `data/results/lda_subspaces/subspace_lda/mode_{mode}/{model_key}/{task}/layer_{LL}/{concept}/` (Option A; headline):
+
+| File | Shape | Notes |
+|---|---|---|
+| `lda_basis_subspace.npy` | `(n_sig, r_ccsvd)` float32 | LDA directions in CCSVD subspace |
+| `lda_basis_full.npy` | `(n_sig, 4096)` float32 | A's directions lifted back to 4096-D |
+| `lda_eigenvalues.npy` | `(K-1,)` float64 | full LDA spectrum (λ_T) |
+| `null_lda_eigenvalues.npy` | `(1000, K-1)` float64 | permutation null |
+| `lda_threshold_99.npy` | `(K-1,)` float64 | per-index 99th percentile |
+| `cohen_d.npy` | `(n_sig, K, K)` float64 | per-direction × class-pair Cohen's d |
+| `cv_accuracy_curve.npy` | `(K-1,)` float64 | k-NN held-out accuracy per direction count |
+| `cv_per_fold.npy` | `(5, K-1)` float64 | per-fold accuracy |
+| `bootstrap_lambda1.npy` | `(200,)` float64 | bootstrap CI on λ_T_1 |
+| `meta.json` | scalar fields, flags | mode, placement=A, n_sig_perm, n_sig_cv, n_sig, cos_sim_AB, audit_status |
+
+Under `data/results/lda_subspaces/full_lda/mode_{mode}/{model_key}/{task}/layer_{LL}/{concept}/` (Option B; audit) — same schema, minus `bootstrap_lambda1` and `lda_basis_subspace`. B's eigenvalue magnitudes are **not** cited; only directions and `n_sig`.
+
+### Master CSVs (Step 6, plot-ready long-form)
+Per (model × mode), under `data/results/lda_subspaces/{subspace_lda,full_lda}/mode_{mode}/{model}/`:
+- `summary_{model}_mode_{mode}.csv` — one row per cell.
+- `eigenvalue_spectra_{model}_mode_{mode}.csv` — long-form per-eigenvalue rows.
+- `null_summary_{model}_mode_{mode}.csv` — long-form per-eigenvalue null percentiles.
+- `cv_per_fold_{model}_mode_{mode}.csv` — long-form per-fold per-direction accuracies.
+- `cohen_d_{model}_mode_{mode}.csv` — long-form per-direction per-class-pair d.
+- `bootstrap_lambda1_{model}_mode_{mode}.csv` (subspace_lda only).
+
+Cross-mode + A↔B aggregates, under `data/results/lda_subspaces/comparison/`:
+- `cross_mode_summary.csv` — one row per cell with all 3 modes' summaries side by side.
+- `cross_mode_alignment.csv` — pairwise top-1 cosine similarity (off↔answer, off↔norm, answer↔norm).
+- `cross_mode_lambda_deltas.csv` and `cross_mode_accuracy_deltas.csv`.
+- `matched_population_cells.csv` — cells where Option A succeeded in all 3 modes.
+- `a_vs_b_alignment.csv` — concatenated per-cell A↔B cosine similarity.
+- `carveout_log.csv` — cells carved out from any mode.
+
 ### Reproducibility manifests
 Each step writes a manifest with sha256s of its inputs and outputs:
 
@@ -238,15 +350,17 @@ Each step writes a manifest with sha256s of its inputs and outputs:
 | 3 | `data/activations/{model_key}/extraction_manifest.json` |
 | 4 | `data/results/embeddings/{model_key}/{task}_layer_{LL}_manifest.json` |
 | 5 | per-cell `meta.json` + per-model `manifest_{model_key}.json` |
+| 6 | per-cell `meta.json` (in `subspace_lda/...` and `full_lda/...`) + per-(model, mode) `manifest_{model}_mode_{mode}.json` + `comparison/comparison_manifest.json` + `residualized/{model}/residualize_manifest_{model}.json` |
 
 ---
 
 ## 8. Environment
 
 - **Conda env:** `geometry` at `/data/user_data/anshulk/miniconda3/envs/geometry`
-- **Python** 3.11.15 · **PyTorch** 2.10.0 + CUDA 12.8 · **Transformers** 5.3.0 · **NumPy** 2.2.6 · **scikit-learn** 1.8.0 · **scipy** (latest in env)
-- **GPU:** A6000 (48 GB VRAM, NVLink). Step 3 ran at batch=512 with 96–100 % GPU utilization. Step 5 runs SVD on GPU via `torch.linalg.svd`.
-- **SLURM partition:** `general`. Step 5 sbatch requests 1 A6000 + 8 CPUs + 16 GB + 2-day wall.
+- **Python** 3.11.15 · **PyTorch** 2.10.0 + CUDA 12.8 · **Transformers** 5.3.0 · **NumPy** 2.2.6 · **scikit-learn** 1.8.0 · **scipy** (latest in env) · **cupy** 14.0.1 · **cuML** 26.02 (Step 6 GPU paths: cupy OAS shrinkage, cupy `solve_triangular`, cuML `KNeighborsClassifier`)
+- **GPU:** A6000 (48 GB VRAM, NVLink). Step 3 ran at batch=512 with 96–100 % GPU utilization. Step 5 runs SVD on GPU via `torch.linalg.svd`. Step 6 keeps a 4096² lower-Cholesky factor on GPU per (task, layer, mode) and reuses it across the 1,000-shuffle permutation null.
+- **SLURM partition:** `general`. Step 5 sbatch requests 1 A6000 + 8 CPUs + 16 GB + 2-day wall. Step 6 sbatch requests 1 A6000 + 16 CPUs + 128 GB + 2-day wall per model. The aggregator job is gated on `afterok` of the main array.
+- **Important:** SLURM scripts use the **absolute conda env Python** (`/data/user_data/anshulk/miniconda3/envs/geometry/bin/python`) to avoid system-Python (3.9) shadowing on compute nodes. `conda activate` alone is not always sufficient in batch contexts.
 
 ---
 
@@ -258,8 +372,9 @@ Each step writes a manifest with sha256s of its inputs and outputs:
 | 2 (dataset) | CPU | seconds | ~30 MB |
 | 3 (activations) | GPU (A6000 × 3 in array) | 79 s | ~3.2 GB |
 | 4 (UMAP + t-SNE) | CPU | 77.9 min | ~25 MB |
-| 5 (CCSVD) | GPU (A6000 × 3 in array) | ~70–90 min per task | ~3 GB (estimate) |
-| 6–9 (Stages 1b–4) | GPU | plan v6 budget: ~270 GPU-h total | TBD |
+| 5 (CCSVD) | GPU (A6000 × 3 in array) | ~70–90 min per task | ~3 GB |
+| 6 (Residualize + LDA) | GPU (A6000 × 3 in array) | ~20–25 h per task with GPU paths | residualized cache ~14 GB; per-cell LDA artifacts + cross-mode CSVs ~5–10 GB |
+| 7–9 (Stages 2–4) | GPU | plan v6 budget: ~250 GPU-h total | TBD |
 
 **Models on disk:** ~51 GB (23 GB GPT-J + 15 GB Llama + 13 GB Pythia).
 

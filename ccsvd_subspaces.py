@@ -658,6 +658,15 @@ def main():
                         help="Smoke-test: only fit this one concept (single name only, not joint).")
     parser.add_argument("--single-task", default=None, help="Smoke-test: only this task.")
     parser.add_argument("--single-layer", type=int, default=None, help="Smoke-test: only this layer.")
+    parser.add_argument(
+        "--mode",
+        default="off",
+        choices=["off", "answer", "norm"],
+        help=("Residualization mode. 'off' uses raw activations and writes to the "
+              "existing ccsvd_subspaces/{model}/... tree (Step 5 layout). 'answer' "
+              "and 'norm' read from data/results/residualized/{model}/{task}_layer_LL_mode_X.npy "
+              "and write to ccsvd_subspaces/mode_{mode}/{model}/... ."),
+    )
     args = parser.parse_args()
 
     cfg = yaml.safe_load(Path(args.config).read_text())
@@ -671,15 +680,19 @@ def main():
     if model_cfg is None:
         raise ValueError(f"Model {args.model} not in config")
 
-    out_root = Path(paths["results_root"]) / "ccsvd_subspaces"
+    if args.mode == "off":
+        out_root = Path(paths["results_root"]) / "ccsvd_subspaces"
+    else:
+        out_root = Path(paths["results_root"]) / "ccsvd_subspaces" / f"mode_{args.mode}"
     out_root.mkdir(parents=True, exist_ok=True)
     embeddings_root = Path(paths["results_root"]) / "embeddings"
     data_root = Path(paths["data_root"])
 
     t_run0 = time.time()
     logger.info("=" * 78)
-    logger.info("CCSVD subspaces — model=%s", args.model)
+    logger.info("CCSVD subspaces — model=%s mode=%s", args.model, args.mode)
     logger.info("config=%s", args.config)
+    logger.info("out_root=%s", out_root)
     logger.info("ccsvd settings: %s", cfg_ccsvd)
 
     # Build cell list
@@ -711,7 +724,13 @@ def main():
                     task, N_total, N_correct, len(singles), len(joints), len(concepts))
 
         for layer in layers:
-            activations_path = data_root / "activations" / args.model / f"{task}_layer_{layer:02d}.npy"
+            if args.mode == "off":
+                activations_path = data_root / "activations" / args.model / f"{task}_layer_{layer:02d}.npy"
+            else:
+                activations_path = (
+                    Path(paths["results_root"]) / "residualized" / args.model
+                    / f"{task}_layer_{layer:02d}_mode_{args.mode}.npy"
+                )
             if not activations_path.exists():
                 logger.warning("missing activations: %s — skipping layer", activations_path)
                 continue

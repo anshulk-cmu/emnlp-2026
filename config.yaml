@@ -72,3 +72,28 @@ ccsvd:
   unit_normalise: false                 # do NOT unit-norm rows
   centroid_weighting: "n_v"             # plan v6 spec: scale by sqrt(n_v / N)
   n_jobs: 1                             # GPU SVD batching is the speed driver; loky workers contend for CUDA context
+
+lda:
+  modes: [off, answer, norm]            # three residualization modes run in parallel
+  scatter_choice: S_T                   # decided; λ_T ∈ [0,1]; S_T permutation-invariant
+  placements: [subspace, full_space]    # Option A (subspace) and Option B (full 4096-D)
+  regularisation_alpha: 1.0e-4          # for A: alpha * trace(S_T_z)/r added to S_T_z
+  use_shrinkage_when_n_over_r_below: 10
+  full_space_shrinkage: ledoit_wolf     # for B: mandatory at d=4096
+  n_permutations: 1000                  # match CCSVD
+  perm_alpha: 0.01                      # 99th percentile sequential stop
+  cv_n_splits: 5
+  cv_knn_k: [1, 5]                      # k-NN settings for CV accuracy
+  use_one_se_rule_for_n_sig_cv: true
+  bootstrap_n: 200
+  random_state: 42
+  min_classes_for_lda: 2
+  min_samples_per_class: 30             # match CCSVD MIN_GROUP_SIZE
+  ans_concept_prefixes: [ans_, answer]  # mode=answer carves out (residualizing answer onto answer-derived concepts is circular)
+  norm_carveout_concepts: [ans_magnitude_tier]   # mode=norm carves out magnitude concept
+  skip_cv_for_full_space: true          # Option B: rebuilding 4096² S_T per fold is expensive; B's role is direction audit, eigenvalues already not cited
+  use_gpu_permutation_null_full_space: true  # Option B permutation null: cupy cho_solve when available
+
+residualization:
+  enabled_modes: [answer, norm]         # off is a passthrough; only fit OLS for these
+  cache_dtype: float32                  # match activation dtype
