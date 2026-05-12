@@ -19,9 +19,9 @@ We test whether the geometric structure a linear probe finds for an arithmetic c
 | 4 | UMAP + t-SNE embeddings | `build_embeddings.py` | done | [docs/04](docs/04_umap_tsne_embeddings.md) | 30 per-cell CSVs; trustworthiness ≥ 0.94 on every cell |
 | 5 | CCSVD subspaces *(Stage 1 sub-step a)* | `ccsvd_subspaces.py` | done | [docs/05](docs/05_ccsvd_subspaces.md) | Per-cell orthonormal basis + 1000-perm null + 5-fold CV; ~480 fit-ok cells per model |
 | 6 | Residualization + LDA refinement *(Stage 1 sub-steps b + c)* | `residualize_activations.py` + `ccsvd_subspaces.py --mode` + `lda_subspaces.py` | done | docs/06_lda_subspaces.md *(in flight)* | 3 modes × 2 placements (Option A in CCSVD subspace, Option B in full 4096-D with shrinkage); 1209 cells matched-population across modes |
-| 7 | Residual hunting *(audit)* | `residual_hunting.py` | **ready** | docs/07_residual_hunting.md *(after run)* | Per-cell union variance budget, MP cliff, Spearman + Pearson sweep with 1000-perm FDR, Stage 3 correlate-set unions pre-computed |
-| 8 | Principal angles *(audit)* | `principal_angles.py` | **ready** | docs/08_principal_angles.md *(after run)* | All-pair angles between concept subspaces; 1000-trial empirical baseline; superposition flag + FDR-q |
-| 9 | JL distance preservation *(audit)* | `jl_distance.py` | **ready** | docs/09_jl_distance_preservation.md *(after run)* | All N(N−1)/2 pairs (no subsampling); Spearman + Pearson + distance-variance-explained + float64 Pythagorean check |
+| 7 | Residual hunting *(audit)* | `residual_hunting.py` | done | [docs/07](docs/07_audit_pipeline.md) | Per-cell variance budget 70-95% across 90 cells; 1000-perm BH-FDR returns 0/90 significant residual correlates; 2 union variants (`merged`, `generous`); Stage 3 correlate-set unions pre-computed |
+| 8 | Principal angles *(audit)* | `principal_angles.py` | done | [docs/07](docs/07_audit_pipeline.md) | All-pair angles between LDA-A concept subspaces (orthonormalised on load); 1000-trial empirical baseline cached on disk; superposition rate 76-92% across cells; multiplication consistently more entangled than addition |
+| 9 | JL distance preservation *(audit)* | `jl_distance.py` | done | [docs/07](docs/07_audit_pipeline.md) | All N(N−1)/2 pairs (no subsampling); Spearman ρ ≥ 0.9994 across every cell × variant; distance-variance-explained ≥ 0.999 on addition, ≥ 0.992 on multiplication; full-pair float64 Pythagorean check passes |
 | 10 | Stage 2 — Bayesian manifold | (next) | pending | — | Centroid Fourier helix → spread-aware `d_SW` → GPLVM → RBF-precision VAE |
 | 11 | Stage 3 — Ownership test | (next) | pending | — | Orthogonalise against algebraic correlates; verdict ∈ {owned, inherited, ambiguous} |
 | 12 | Stage 4 — Causal ablation | (next) | pending | — | Δlogit on first answer token |
@@ -49,7 +49,7 @@ For each (model, task, layer, concept, mode) cell on the per-model correct subse
 - `answer` — OLS-regress activations on the gold answer, keep residual. Carves out `ans_*` and `answer` concepts (circular).
 - `norm` — OLS-regress on `||x||₂`, keep residual. Carves out `ans_magnitude_tier`.
 
-### Audit (Steps 7–9, ready to run)
+### Audit (Steps 7–9, done)
 
 Three audit phases between Stage 1 and Stage 2. Their job is to honestly answer:
 - "Have we captured every linearly organised concept?" — *Step 7 (residual hunting).*
@@ -74,6 +74,21 @@ Three audit phases between Stage 1 and Stage 2. Their job is to honestly answer:
 - Pairwise distances in full 4096-D and projected k-D, batched on GPU.
 - Spearman ρ + Pearson r + mean/max relative error + distance-variance-explained.
 - Full-pair Pythagorean check in float64 on GPU.
+
+### Audit headlines (production run, 2026-05-12)
+
+90 cells (3 models × 2 tasks × 3 modes × 5 layers); 0 cells failed; 270 cell evaluations across the three steps.
+
+| Headline | Number |
+|---|---|
+| Variance captured by named-concept union (mode=off, merged, median per model) | GPT-J 0.866 / Llama 0.858 / Pythia 0.949 on addition; 0.739 / 0.755 / 0.874 on multiplication |
+| FDR-significant residual correlates after 1000-perm BH (|ρ_s| > 0.15 AND q < 0.05) | **0 / 90 cells** |
+| Median superposition rate across concept pairs | 80% on addition; 90% on multiplication |
+| Pairwise-distance preservation Spearman ρ (mode=off, merged) | ≥ 0.9994 every cell; addition median 0.99996; multiplication median 0.99963 |
+| MP cliff regime | Reliable (γ < 0.7) on every addition cell; unreliable (γ > 1) on every multiplication cell |
+| Total chained wall time | ~13 hours on 6 concurrent A6000s |
+
+The full per-cell numbers, the cross-mode breakdown, the mathematical framework, and the analysis appendix live in [docs/07_audit_pipeline.md](docs/07_audit_pipeline.md) (3,060 lines).
 
 ### Stages 2–4 (Steps 10–12, planned)
 
@@ -166,7 +181,8 @@ emnlp2026/
 │   ├── 03_eval_and_extract.md
 │   ├── 04_umap_tsne_embeddings.md
 │   ├── 05_ccsvd_subspaces.md
-│   └── 06_lda_subspaces.md              # written after Step 6 lands
+│   ├── 06_lda_subspaces.md
+│   └── 07_audit_pipeline.md             # combined Steps 7/8/9 report (3,060 lines)
 │
 └── data/                                # symlink → /data/user_data/anshulk/emnlp2026
     ├── models/                          # 51 GB weights
@@ -321,9 +337,9 @@ Aggregator outputs under `data/results/jl_distance/comparison/`: `summary_all.cs
 | 4 — UMAP + t-SNE | CPU | 77.9 min | ~25 MB |
 | 5 — CCSVD | GPU (A6000 × 3) | ~70–90 min/task | ~3 GB |
 | 6 — Residualise + LDA | GPU (A6000 × 3) | ~3–6 h/task | residualised cache ~14 GB + LDA artifacts ~5–10 GB |
-| 7 — Residual hunting | GPU (A6000 × 3) | ~3 h | ~5 GB |
-| 8 — Principal angles | GPU (A6000 × 3) | ~30 min | ~1 GB |
-| 9 — JL distance | GPU (A6000 × 3) | ~1.5 h | ~5 GB |
+| 7 — Residual hunting | GPU (A6000 × 6) | 17 min wall, 1.1 GPU-h total | 7.0 GB |
+| 8 — Principal angles | GPU (A6000 × 6) | 12.5 h wall, ~44 GPU-h total | 39 MB |
+| 9 — JL distance | GPU (A6000 × 6) | 57 min wall, 2.5 GPU-h total | 2.7 GB |
 | 10–12 — Stages 2–4 | GPU | plan v6 budget ~250 GPU-h | TBD |
 
 Models on disk: ~51 GB (23 GB GPT-J + 15 GB Llama + 13 GB Pythia).
