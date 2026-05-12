@@ -898,11 +898,8 @@ def main():
             logger.warning(f"missing activations: {act_path} — skipping layer {layer}")
             continue
         X_full = np.load(act_path)
-        if args.mode == "off":
-            X_correct = np.ascontiguousarray(X_full[correct_mask].astype(np.float32))
-        else:
-            # Residualized cache is already correct-filtered (Step 5 phase 1).
-            X_correct = np.ascontiguousarray(X_full.astype(np.float32))
+        # Both raw and residualized caches store the full task population; mask here.
+        X_correct = np.ascontiguousarray(X_full[correct_mask].astype(np.float32))
         del X_full
 
         rows = run_cell(
