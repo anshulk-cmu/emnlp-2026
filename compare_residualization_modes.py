@@ -239,7 +239,12 @@ def main():
                "cross_mode_lambda_deltas.csv", "cross_mode_accuracy_deltas.csv",
                "matched_population_cells.csv", "carveout_log.csv"]:
         path = out_dir / fn
-        n = len(pd.read_csv(path)) if path.exists() else 0
+        n = 0
+        if path.exists() and path.stat().st_size > 0:
+            try:
+                n = len(pd.read_csv(path))
+            except pd.errors.EmptyDataError:
+                n = 0
         logger.info("  %s  (rows=%d)", path, n)
 
     manifest = {

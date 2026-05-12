@@ -74,7 +74,7 @@ ccsvd:
   n_jobs: 1                             # GPU SVD batching is the speed driver; loky workers contend for CUDA context
 
 lda:
-  modes: [off, answer, norm]            # three residualization modes run in parallel
+  modes: ["off", "answer", "norm"]      # three residualization modes; quoted so YAML doesn't parse "off" as False
   scatter_choice: S_T                   # decided; λ_T ∈ [0,1]; S_T permutation-invariant
   placements: [subspace, full_space]    # Option A (subspace) and Option B (full 4096-D)
   regularisation_alpha: 1.0e-4          # for A: alpha * trace(S_T_z)/r added to S_T_z
