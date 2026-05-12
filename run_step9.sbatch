@@ -16,7 +16,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128G
 #SBATCH --time=2-00:00:00
-#SBATCH --array=0-5%3
+#SBATCH --array=0-5
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=anshulk@andrew.cmu.edu
 
