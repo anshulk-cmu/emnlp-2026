@@ -44,7 +44,7 @@ cd /home/anshulk/emnlp2026
 PYTHON=/data/user_data/anshulk/miniconda3/envs/geometry/bin/python
 echo "[$(date)] PYTHON=$PYTHON"
 $PYTHON --version
-$PYTHON -c "import numpy, scipy, sklearn, statsmodels, cupy, pandas; print(f'numpy={numpy.__version__} cupy={cupy.__version__}')"
+$PYTHON -c "import numpy, scipy, sklearn, cupy, pandas; print(f'numpy={numpy.__version__} scipy={scipy.__version__} cupy={cupy.__version__}')"
 
 for MODE in off answer norm; do
     echo "[$(date)] === Step 7: model=$MODEL task=$TASK mode=$MODE ==="
