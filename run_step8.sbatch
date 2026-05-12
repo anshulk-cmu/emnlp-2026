@@ -7,9 +7,10 @@
 #SBATCH --job-name=emnlp_step8
 #SBATCH --output=/data/user_data/anshulk/emnlp2026/logs/slurm-step8-%A_%a.out
 #SBATCH --error=/data/user_data/anshulk/emnlp2026/logs/slurm-step8-%A_%a.err
-#SBATCH --partition=general
-#SBATCH --qos=array_qos
+#SBATCH --partition=preempt
+#SBATCH --qos=preempt_qos
 #SBATCH --gres=gpu:A6000:1
+#SBATCH --requeue
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128G
 #SBATCH --time=2-00:00:00
