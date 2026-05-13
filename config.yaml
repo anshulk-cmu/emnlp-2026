@@ -120,3 +120,53 @@ stage2a:
   store_full_null_only_for_detections: true  # disk economy: only helix/circle cells keep full null spectra
   prior_period_table_path: configs/prior_periods.yaml
   random_state: 42                      # base seed; per-cell seed derived via sha256(model|task|...)
+
+stage2b:
+  # Stage 2b — Spread-aware Mahalanobis test (d_SW). Per-cell ρ_centroid between
+  # Euclidean centroid distances and spread-aware (Mahalanobis-style) distances.
+  # Discover-then-fit: Stage 2a's discovered period and axes are inherited; Stage
+  # 2b discovers the within-class spread structure data-adaptively and fits d_SW
+  # confirmatorily.
+  # Run on full data — no subsampling. Bootstrap is WITH replacement at size N.
+  n_permutations: 1000                  # label-permutation null on ρ_centroid
+  n_bootstrap: 1000                     # bootstrap CI on ρ_centroid (with replacement, size N)
+  lambda_factor: 1.0e-6                 # Tikhonov λ = lambda_factor * tr(Σ_pool)/r
+  shrinkage_lw_threshold: 10            # ratio_v = n_v/r ≥ 10 → sample; else LW
+  shrinkage_oas_threshold: 5            # ratio_v < 5 → OAS (Chen et al. 2010)
+  rho_pass_threshold: 0.85              # ρ_centroid pass gate (plan §3.2.2)
+  rho_low_ci_threshold: 0.70            # bootstrap 95% CI lower bound pass gate
+  rho_marginal_low: 0.50                # ρ_low below this → centroid_only regardless
+  ci_halfwidth_unstable: 0.30           # null_unstable if (ρ_high − ρ_low) / 2 > this
+  fdr_alpha: 0.05                       # BH-FDR threshold on q_dsw
+  min_group_size: 30                    # per-value floor; matches Stage 2a
+  bootstrap_min_n_v_floor: 5            # below this in a bootstrap draw → reject & redraw
+  bootstrap_max_redraws: 100            # cap on per-draw redraw attempts
+  min_K_for_dsw: 4                      # K_present floor (Stage 2a inheritance)
+  loo_runlist_band: 0.05                # B.8 LOO restricted to cells with |ρ−0.85| < band
+  shrinkage_cutpoint_sweep: [3, 5, 8, 10, 15]   # appendix sensitivity sweep
+  shrinkage_cutpoint_n_cells: 5         # 5 highest-N cells per layer
+  variants: ["lda_a", "ccsvd"]
+  modes: ["off", "answer", "norm"]
+  # Confidence tiers (orthogonal to verdict)
+  tier_high_min_K: 6
+  tier_high_min_n_v: 100
+  tier_high_min_ratio: 10
+  tier_high_q_threshold: 0.01
+  tier_high_rho_low: 0.80
+  tier_medium_min_K: 5
+  tier_medium_min_n_v: 50
+  tier_medium_min_ratio: 5
+  tier_medium_q_threshold: 0.05
+  tier_medium_rho_low: 0.70
+  tier_discovery_only_max_ratio: 2      # any value with ratio_v < 2 → DISCOVERY_ONLY
+  # Toys
+  toy_calibration_path: configs/stage2b.yaml  # written by check_stage2b_toys.py
+  toy_5b_target_rho: 0.80               # legacy; superseded by toy_5b_extreme_max_rho
+  toy_5b_extreme_max_rho: 0.85          # at the largest sweep scale, median ρ must be < this (pass gate)
+  toy_5b_scale_sweep: [1.0, 5.0, 20.0, 50.0]   # std of per-VALUE anisotropic noise along random per-value direction
+  toy_5b_n_seeds: 3
+  toy_7b_n_cells: 100                   # binomial 95% CI [2, 11] around 5% nominal
+  toy_7b_lower: 2
+  toy_7b_upper: 11
+  store_full_null_only_for_detections: true
+  random_state: 42

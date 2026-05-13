@@ -1,0 +1,58 @@
+toy_5b_tangent_scale: 50.0
+toy_5b_calibration:
+  swept_scales:
+  - 1.0
+  - 5.0
+  - 20.0
+  - 50.0
+  per_scale_rho:
+    1.0:
+    - 0.864558629776021
+    - 0.8739130434782608
+    - 0.908695652173913
+    5.0:
+    - 0.9171277997364954
+    - 0.7865612648221344
+    - 0.8944664031620554
+    20.0:
+    - 0.7769433465085639
+    - 0.7376811594202899
+    - 0.855072463768116
+    50.0:
+    - 0.597760210803689
+    - 0.5085638998682477
+    - 0.6819499341238472
+  per_scale_verdicts:
+    1.0:
+    - spread_confirmed
+    - spread_confirmed
+    - spread_confirmed
+    5.0:
+    - spread_confirmed
+    - centroid_only_shape
+    - spread_confirmed
+    20.0:
+    - centroid_only_shape
+    - centroid_only_shape
+    - spread_marginal
+    50.0:
+    - centroid_only_shape
+    - centroid_only_shape
+    - centroid_only_shape
+  chosen_scale: 50.0
+  extreme_pass_max_rho: 0.85
+  monotonicity_ok: true
+  n_seeds: 3
+  timestamp: '2026-05-13T02:39:24.776268Z'
+  lib_versions:
+    numpy: 2.2.6
+  discriminator_kind: continuous_probe
+toy_7b_fpr:
+  n_cells: 100
+  n_spread_confirmed: 3
+  accept_band:
+  - 2
+  - 11
+  status: pass
+  timestamp: '2026-05-13T02:40:58.253571Z'
+  elapsed_seconds: 88.5
