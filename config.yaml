@@ -97,3 +97,26 @@ lda:
 residualization:
   enabled_modes: [answer, norm]         # off is a passthrough; only fit OLS for these
   cache_dtype: float32                  # match activation dtype
+
+stage2a:
+  # Stage 2a — Centroid Fourier helix fit (discover-then-fit, Whittle null).
+  # Period is discovered from the data via DFT periodogram argmax; the Whittle
+  # max-over-frequencies null bakes the free-period search into the null itself.
+  # The prior period table at `prior_period_table_path` is OUTPUT-ONLY — never
+  # enters the test.
+  n_permutations: 1000                  # Whittle null shuffles (matches CCSVD/LDA standard)
+  perm_alpha: 0.01                      # per-coord p-value gate against max-over-freq null
+  fdr_alpha: 0.05                       # BH-FDR threshold on q_helix, q_two_axis
+  fcr_threshold: 0.30                   # in-cell helix/circle pass gate (relative)
+  two_axis_alpha: 0.01                  # both periodic-coord p-values must be < this
+  linear_alpha: 0.01                    # linear-pitch coord p-value gate
+  min_K_for_fft: 4                      # K < 4 → no Fourier (verdict = low_K); K_natural reported regardless
+  min_group_size: 30                    # match ccsvd.min_group_size for centroid filter
+  redraw_rate_max: 0.10                 # null_unstable flag if > this fraction of perms redrawn
+  redraw_attempt_cap: 100               # per shuffle slot; if still failing, mark null_unstable
+  concordance_bin_tolerance: 1          # top-2 coords within ±1 Fourier bin → period_concordant
+  vote_winner_margin: 2.0               # winning period must beat runner-up by this ratio (else period_inconsistent)
+  variants: ["lda_a", "ccsvd"]          # two subspace sources per cell (sensitivity analysis)
+  store_full_null_only_for_detections: true  # disk economy: only helix/circle cells keep full null spectra
+  prior_period_table_path: configs/prior_periods.yaml
+  random_state: 42                      # base seed; per-cell seed derived via sha256(model|task|...)

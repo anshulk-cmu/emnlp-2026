@@ -1,0 +1,128 @@
+# =============================================================================
+# Prior period predictions per concept family.
+#
+# OUTPUT-ONLY: this table feeds the `period_match` column in Stage 2a results.
+# It NEVER enters the test itself. The Stage 2a algorithm always discovers the
+# period from data via Whittle max-over-frequencies. This file only records what
+# we *predict* the discovered period will be, based on:
+#   - Kantamneni & Tegmark 2024 (KT) — digit helix at period 10 in GPT-J
+#   - Parent project Phase G (`/home/anshulk/arithmetic-geometry`) — empirical
+#     periods discovered on Llama 3.1 8B
+#   - Mathematical constraints — column algebra and carry-domain reasoning
+#
+# Each concept maps to a list of acceptable predicted periods (within 1 Fourier
+# bin of the discovered period counts as `period_match = True`). If the
+# discovered period is outside the list, `period_match = False` and the cell
+# appears in `unexpected_periods.csv` for review.
+#
+# Concepts not listed here get `prior_predicted_period = []` and always match
+# (no prediction to falsify).
+# =============================================================================
+
+# ─── Tier 1: digits and operands ─────────────────────────────────────────────
+a:
+  predicted_periods: [10, 100]
+  source: "KT 2024 — operand magnitude helix"
+b:
+  predicted_periods: [10, 100]
+  source: "KT 2024 — operand magnitude helix"
+a_units:
+  predicted_periods: [10]
+  source: "KT 2024 — digit helix"
+a_tens:
+  predicted_periods: [10]
+  source: "KT 2024 — digit helix"
+b_units:
+  predicted_periods: [10]
+  source: "KT 2024 — digit helix"
+b_tens:
+  predicted_periods: [10]
+  source: "KT 2024 — digit helix"
+ans_units:
+  predicted_periods: [10]
+  source: "KT 2024 — last-digit structure"
+ans_tens:
+  predicted_periods: [10]
+  source: "KT 2024 — digit helix"
+ans_hundreds:
+  predicted_periods: [10]
+  source: "mathematical — decimal place value"
+ans_thousands:
+  predicted_periods: [10]
+  source: "mathematical — decimal place value"
+answer:
+  predicted_periods: [10, 100]
+  source: "KT 2024 + parent Phase G — last-digit / magnitude"
+
+# ─── Tier 2: column algebra and carries ──────────────────────────────────────
+column_sum_units:
+  predicted_periods: [10]
+  source: "mathematical — column algebra mod 10"
+column_sum_tens:
+  predicted_periods: [10]
+  source: "mathematical — column algebra mod 10"
+column_sum_hundreds:
+  predicted_periods: [10]
+  source: "mathematical — column algebra mod 10"
+column_sum_thousands:
+  predicted_periods: [10]
+  source: "mathematical — column algebra mod 10"
+
+# Carries: parent Phase G discovered specific raw periods on Llama 3.1 8B mult.
+# Addition carries have smaller domain — predictions are mathematical only.
+carry_units:
+  predicted_periods: [18, 10]   # 18 from parent (mult); 10 if mod-10 structure
+  source: "parent Phase G mult — raw period; addition has carry ∈ {0, 1}"
+carry_tens:
+  predicted_periods: [27, 10]
+  source: "parent Phase G mult — raw period 27 for carry_2"
+carry_hundreds:
+  predicted_periods: [19, 10]
+  source: "parent Phase G mult — raw period 19 for carry_3"
+carry_thousands:
+  predicted_periods: [10]
+  source: "parent Phase G mult — raw period 10 for carry_4"
+
+running_sum_units:
+  predicted_periods: [10]
+  source: "mathematical — column algebra mod 10"
+running_sum_tens:
+  predicted_periods: [10]
+  source: "mathematical — column algebra mod 10"
+running_sum_hundreds:
+  predicted_periods: [10]
+  source: "mathematical — column algebra mod 10"
+running_sum_thousands:
+  predicted_periods: [10]
+  source: "mathematical — column algebra mod 10"
+
+# Partial products: parent Phase G found mixed results — no firm prediction.
+partial_product_units:
+  predicted_periods: []
+  source: "open — Phase G found mixed; let the data speak"
+partial_product_a_units_b_tens:
+  predicted_periods: []
+  source: "open"
+partial_product_a_tens_b_units:
+  predicted_periods: []
+  source: "open"
+partial_product_a_tens_b_tens:
+  predicted_periods: []
+  source: "open"
+
+# ─── Tier 4: operand relationships ───────────────────────────────────────────
+max_operand:
+  predicted_periods: [10, 100]
+  source: "KT 2024 — magnitude helix"
+min_operand:
+  predicted_periods: [10, 100]
+  source: "KT 2024 — magnitude helix"
+operand_diff:
+  predicted_periods: [10, 100]
+  source: "mathematical — same structure as operand magnitude"
+operand_abs_diff:
+  predicted_periods: [10, 100]
+  source: "mathematical — same structure as operand magnitude"
+
+# Tier 3/4 binary/categorical concepts (K < 5) are excluded by the precondition
+# gate in Step 2 (K_natural < 5 → geometry = n/a). They are not listed here.
