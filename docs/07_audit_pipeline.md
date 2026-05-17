@@ -1,6 +1,7 @@
 # Step 7 / 8 / 9 — Audit Pipeline: Residual Hunting, Principal Angles, Johnson-Lindenstrauss Distance Preservation
 
-**Anshul Kumar's Geometric Manifold Interpretability Project**
+**Project:** From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models
+**Authors:** Anshul Kumar (CMU, primary), Deeksha Varshney (IIT Jodhpur, advisor), Manoj Kumar (IIT Roorkee, advisor), Barnabás Póczos (CMU, main advisor)
 **Carnegie Mellon University, May 2026**
 
 This document records every decision, every number, and every result from the three-phase audit that sits between Step 6 (LDA refinement) and the future Stage 2 (Bayesian manifold characterisation). It is the truth document for this stage. All numbers are validated against the actual output files produced by SLURM array jobs `7884716` (Step 7), `7884747` (Step 8), and `7884749` (Step 9), completed on 2026-05-12.

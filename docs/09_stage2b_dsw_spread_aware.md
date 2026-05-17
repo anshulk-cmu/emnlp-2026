@@ -1,5 +1,9 @@
 # Step 11 / Stage 2b — Spread-aware Mahalanobis test (`d_SW`)
 
+**Project:** From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models
+**Authors:** Anshul Kumar (CMU, primary), Deeksha Varshney (IIT Jodhpur, advisor), Manoj Kumar (IIT Roorkee, advisor), Barnabás Póczos (CMU, main advisor)
+**Carnegie Mellon University, May 2026**
+
 > Technical report. Procedure and numbers only; the **Intuition and analysis** section at the end is the only place interpretation appears (it is explicitly requested by the user).
 >
 > Pipeline location: `stage2b_dsw_spread_aware.py`, `aggregate_stage2b_dsw.py`, `check_stage2b_toys.py`, `run_stage2b.sbatch`, `run_stage2b_aggregate.sbatch`, `configs/stage2b.yaml`. Plan reference: `plan.md` §3.2.2 (B.0–B.9), §3.2.5 (toys). Approval plan: `/home/anshulk/.claude/plans/lets-create-a-perfect-quirky-pretzel.md`.

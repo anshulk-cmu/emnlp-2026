@@ -1,8 +1,8 @@
 # Step 10 / Stage 2a — Centroid Fourier Helix Fit (Discover-Then-Fit)
 
 **Project:** From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models
+**Authors:** Anshul Kumar (CMU, primary), Deeksha Varshney (IIT Jodhpur, advisor), Manoj Kumar (IIT Roorkee, advisor), Barnabás Póczos (CMU, main advisor)
 **Carnegie Mellon University, May 2026**
-**Author:** Anshul Kumar
 
 This document records every decision, every number, and every result from Stage 2a — the first sub-step of "Bayesian manifold characterisation" — as run on the per-model correct subset for two tasks (addition, multiplication, `a, b ∈ [0, 99]`) across three pre-trained LMs (GPT-J 6B, Llama 3.1 8B, Pythia 6.9B), three residualization modes (`off`, `answer`, `norm`), five layers per model, and two subspace variants (LDA-A, CCSVD). All numbers in this document are validated against the actual output files produced by SLURM array jobs `7891280` and `7891372` (workers) and `7891373` (aggregator), completed 2026-05-12.
 
@@ -2320,6 +2320,6 @@ The paper's claim should be "we report 808 detections under a specific set of co
 
 The body of this document reports numbers and procedure. The interpretation, the mechanistic stories, the speculation about what Stage 2b/c/d/3/4 might find — all live in this appendix. This separation is enforced by the project's `feedback_neutral_technical_writing` memory and applies across all step documents.
 
-The appendix's role is to capture the analysis that's useful for the next person to read this doc (the senior author, a reviewer, future-me) without contaminating the procedural record. If a downstream stage's results contradict an appendix prediction, the appendix is wrong; the body remains correct. This separation is more useful than it sounds — it prevents the "we knew it all along" retroactive rewriting that happens when prediction and observation are entangled.
+The appendix's role is to capture the analysis that's useful for the next person to read this doc (the main advisor, a reviewer, future-me) without contaminating the procedural record. If a downstream stage's results contradict an appendix prediction, the appendix is wrong; the body remains correct. This separation is more useful than it sounds — it prevents the "we knew it all along" retroactive rewriting that happens when prediction and observation are entangled.
 
 The 808 numbers in §7–§14 are not opinions. The 18 sections of this appendix are. The reader is welcome to disagree with the appendix; they should not disagree with the body without first checking the comparison CSVs.

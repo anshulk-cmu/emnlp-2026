@@ -1,6 +1,7 @@
 # Step 4: UMAP and t-SNE embeddings — per-cell CSVs and 45 selected plots
 
-**Anshul's Geometry of Arithmetic in LMs Project**
+**Project:** From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models
+**Authors:** Anshul Kumar (CMU, primary), Deeksha Varshney (IIT Jodhpur, advisor), Manoj Kumar (IIT Roorkee, advisor), Barnabás Póczos (CMU, main advisor)
 **Carnegie Mellon University, May 2026**
 
 This document records every decision, every number, and every result from

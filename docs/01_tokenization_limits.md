@@ -1,6 +1,7 @@
 # Step 1 (preflight): Single-token integer limits across GPT-J 6B, Llama 3.1 8B, and Pythia 6.9B
 
-**Anshul's Geometry of Arithmetic in LMs Project**
+**Project:** From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models
+**Authors:** Anshul Kumar (CMU, primary), Deeksha Varshney (IIT Jodhpur, advisor), Manoj Kumar (IIT Roorkee, advisor), Barnabás Póczos (CMU, main advisor)
 **Carnegie Mellon University, May 2026**
 
 This document records every decision, every number, and every result from the

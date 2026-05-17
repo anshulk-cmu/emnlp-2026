@@ -1,6 +1,7 @@
 # Step 3: Behavioral evaluation + activation extraction across 3 models × 2 tasks
 
-**Anshul's Geometry of Arithmetic in LMs Project**
+**Project:** From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models
+**Authors:** Anshul Kumar (CMU, primary), Deeksha Varshney (IIT Jodhpur, advisor), Manoj Kumar (IIT Roorkee, advisor), Barnabás Póczos (CMU, main advisor)
 **Carnegie Mellon University, May 2026**
 
 This document records every decision, every number, and every result from

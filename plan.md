@@ -1,10 +1,12 @@
 # Complete End-to-End EMNLP Plan
-## Owned or Inherited? A Bayesian Pipeline for Testing Probe Geometry in GPT-J Arithmetic
+## From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models
 
 **Version:** v6 (data scope locked).
 **Status:** Living document. Update as decisions lock and experiments land.
-**Primary author:** Anshul Kumar.
-**Senior author:** Barnabás Póczos.
+**Primary author:** Anshul Kumar (CMU).
+**Advisor:** Deeksha Varshney (IIT Jodhpur).
+**Advisor:** Manoj Kumar (IIT Roorkee).
+**Main advisor:** Barnabás Póczos (CMU).
 **Target venue:** ACL Rolling Review → EMNLP 2026 Main, long paper. Workshop fallback: BlackBoxNLP.
 **Length budget:** 8 pages content + unlimited references + appendices + mandatory limitations.
 **Primary model:** GPT-J 6B (following Kantamneni & Tegmark 2024).
@@ -27,21 +29,21 @@
 
 ## PART 0 — TITLE AND POSITIONING
 
-### 0.1 The working title
+### 0.1 The final title
 
-> **Owned or Inherited? A Bayesian Pipeline for Testing Probe Geometry in GPT-J Arithmetic**
+> **From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models**
 
 The title does four things in one line:
-1. Asks the central question (owned vs inherited).
-2. Names the methodological contribution (a Bayesian pipeline).
-3. Names the subject (probe geometry in arithmetic).
-4. Names the primary model (GPT-J).
+1. Names the methodological arc (linear probes → Bayesian manifolds).
+2. Names the methodological contribution (Bayesian manifold characterisation).
+3. Names the subject (geometry of arithmetic).
+4. Names the model class (language models; pre-trained LMs in general, not a single model).
 
 ### 0.2 Alternative titles (rank-ordered)
 
 If Póczos prefers a different register, here are alternatives in decreasing professionalism:
 
-1. *"Owned or Inherited? A Bayesian Pipeline for Testing Probe Geometry in GPT-J Arithmetic"* (working choice).
+1. *"Owned or Inherited? A Bayesian Pipeline for Testing Probe Geometry in GPT-J Arithmetic"*.
 2. *"Testing Representational Ownership: A Bayesian Geometric Pipeline for Arithmetic Probes in GPT-J"*.
 3. *"From Linear Probes to Bayesian Manifolds: Testing Geometric Ownership in GPT-J Arithmetic"*.
 4. *"Inherited Ingredients: Bayesian Tests of Linear Probe Geometry in GPT-J Arithmetic"* (plays on the project's "ingredients without a recipe" metaphor).
@@ -1454,14 +1456,20 @@ The EMNLP responsible NLP checklist requires source code, datasets, hyperparamet
 
 ### 27.1 Author list
 
-1. **Anshul Kumar** — first author.
-2. **Barnabás Póczos** — senior author.
+1. **Anshul Kumar** (CMU) — primary author.
+2. **Deeksha Varshney** (IIT Jodhpur) — advisor.
+3. **Manoj Kumar** (IIT Roorkee) — advisor.
+4. **Barnabás Póczos** (CMU) — main advisor.
 
 ### 27.2 Roles
 
 Anshul: pipeline implementation, GPT-J port, addition + multiplication data generation, all experiments, first-draft writing.
 
-Póczos: methodological soundness review, statistical decisions, paper revision, technical claims auditing.
+Deeksha Varshney: advisory review, methodological feedback, paper revision.
+
+Manoj Kumar: advisory review, methodological feedback, paper revision.
+
+Póczos: main-advisor methodological soundness review, statistical decisions, paper revision, technical claims auditing.
 
 ### 27.3 Acknowledgements
 
@@ -1527,7 +1535,7 @@ Read aloud, print and proofread, grayscale figures, cross-references.
 ### 30.1 Locked decisions (May 2026, v6)
 
 1. **Venue:** EMNLP 2026 main, long paper. Backup: BlackboxNLP.
-2. **Authors:** Anshul Kumar, Barnabás Póczos.
+2. **Authors:** Anshul Kumar (CMU, primary), Deeksha Varshney (IIT Jodhpur, advisor), Manoj Kumar (IIT Roorkee, advisor), Barnabás Póczos (CMU, main advisor).
 3. **Primary model:** GPT-J 6B.
 4. **Secondary model:** Llama 3.1 8B (replication phase).
 5. **Tasks:** Addition + multiplication.
@@ -1536,7 +1544,7 @@ Read aloud, print and proofread, grayscale figures, cross-references.
 8. **Correctness criterion (NEW v6):** Standard exact-match for addition (single-token); first-answer-token correctness for multiplication.
 9. **Concepts:** Six total (three per task).
 10. **Pipeline:** Four stages.
-11. **Title:** "Owned or Inherited? A Bayesian Pipeline for Testing Probe Geometry in GPT-J Arithmetic" (working).
+11. **Title:** "From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models" (final).
 12. **Pre-registration:** Mandatory before any addition experiments.
 13. **Code release:** Yes, full.
 

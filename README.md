@@ -1,30 +1,34 @@
 # EMNLP 2026 — Geometry of Arithmetic in Language Models
 
-**Paper (working title):** *From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models*
-**Authors:** Anshul Kumar (first), Barnabás Póczos (senior)
+**Paper (final title):** *From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models*
+**Authors:** Anshul Kumar (primary, CMU), Deeksha Varshney (advisor, IIT Jodhpur), Manoj Kumar (advisor, IIT Roorkee), Barnabás Póczos (main advisor, CMU)
 **Target venue:** ACL Rolling Review → EMNLP 2026 Main (long paper). Workshop fallback: BlackBoxNLP.
 
-We test whether the geometric structure a linear probe finds for an arithmetic concept actually belongs to that concept, or is inherited from algebraically related concepts that share residual-stream dimensions. Pipeline: linear probe → audit (variance budget, between-concept overlap, distance preservation) → Bayesian manifold characterisation → ownership orthogonalisation → causal ablation. Three pre-trained LMs (GPT-J 6B, Llama 3.1 8B, Pythia 6.9B); two tasks (addition, multiplication, both `a, b ∈ [0, 99]`); per-model correct subset.
+Tests whether the geometric structure a linear probe finds for an arithmetic concept actually belongs to that concept, or is inherited from algebraically related concepts that share residual-stream dimensions. Pipeline: linear probe → audit (variance budget, between-concept overlap, distance preservation) → Bayesian manifold characterisation → ownership orthogonalisation → causal ablation. Three pre-trained LMs (GPT-J 6B, Llama 3.1 8B, Pythia 6.9B); two tasks (addition, multiplication, both `a, b ∈ [0, 99]`); per-model correct subset.
 
 ---
 
-## 1. Status
+## 1. Status as of 2026-05-17
 
 | # | Step | Script | Status | Doc | Headline output |
 |---|---|---|---|---|---|
 | 0 | Model downloads | (manual) | done | this README §3 | 51 GB of weights in `data/models/` |
 | 1 | Tokenization preflight | `check_tokenization_limits.py` | done | [docs/01](docs/01_tokenization_limits.md) | Single-token integer caps: GPT-J 520, Llama 999, Pythia 530 |
-| 2 | Dataset generation | `generate_datasets.py` | done | [docs/02](docs/02_dataset_generation.md) | Addition 10,000; multiplication 3,023 (cross-model single-token intersection) |
-| 3 | Activation extraction | `eval_and_extract.py` | done | [docs/03](docs/03_eval_and_extract.md) | 30 `.npy` files (5 layers × 2 tasks × 3 models), 79 s SLURM wall |
-| 4 | UMAP + t-SNE embeddings | `build_embeddings.py` | done | [docs/04](docs/04_umap_tsne_embeddings.md) | 30 per-cell CSVs; trustworthiness ≥ 0.94 on every cell |
-| 5 | CCSVD subspaces *(Stage 1 sub-step a)* | `ccsvd_subspaces.py` | done | [docs/05](docs/05_ccsvd_subspaces.md) | Per-cell orthonormal basis + 1000-perm null + 5-fold CV; ~480 fit-ok cells per model |
-| 6 | Residualization + LDA refinement *(Stage 1 sub-steps b + c)* | `residualize_activations.py` + `ccsvd_subspaces.py --mode` + `lda_subspaces.py` | done | docs/06_lda_subspaces.md *(in flight)* | 3 modes × 2 placements (Option A in CCSVD subspace, Option B in full 4096-D with shrinkage); 1209 cells matched-population across modes |
-| 7 | Residual hunting *(audit)* | `residual_hunting.py` | done | [docs/07](docs/07_audit_pipeline.md) | Per-cell variance budget 70-95% across 90 cells; 1000-perm BH-FDR returns 0/90 significant residual correlates; 2 union variants (`merged`, `generous`); Stage 3 correlate-set unions pre-computed |
-| 8 | Principal angles *(audit)* | `principal_angles.py` | done | [docs/07](docs/07_audit_pipeline.md) | All-pair angles between LDA-A concept subspaces (orthonormalised on load); 1000-trial empirical baseline cached on disk; superposition rate 76-92% across cells; multiplication consistently more entangled than addition |
-| 9 | JL distance preservation *(audit)* | `jl_distance.py` | done | [docs/07](docs/07_audit_pipeline.md) | All N(N−1)/2 pairs (no subsampling); Spearman ρ ≥ 0.9994 across every cell × variant; distance-variance-explained ≥ 0.999 on addition, ≥ 0.992 on multiplication; full-pair float64 Pythagorean check passes |
-| 10 | Stage 2 — Bayesian manifold | (next) | pending | — | Centroid Fourier helix → spread-aware `d_SW` → GPLVM → RBF-precision VAE |
-| 11 | Stage 3 — Ownership test | (next) | pending | — | Orthogonalise against algebraic correlates; verdict ∈ {owned, inherited, ambiguous} |
-| 12 | Stage 4 — Causal ablation | (next) | pending | — | Δlogit on first answer token |
+| 2 | Dataset generation | `generate_datasets.py` | done | [docs/02](docs/02_dataset_generation.md) | Addition 10,000; multiplication 3,023 |
+| 3 | Activation extraction | `eval_and_extract.py` | done | [docs/03](docs/03_eval_and_extract.md) | 30 `.npy` files (5 layers × 2 tasks × 3 models) |
+| 4 | UMAP + t-SNE embeddings | `build_embeddings.py` | done | [docs/04](docs/04_umap_tsne_embeddings.md) | 30 per-cell CSVs; trustworthiness ≥ 0.94 |
+| 5 | CCSVD subspaces | `ccsvd_subspaces.py` | done | [docs/05](docs/05_ccsvd_subspaces.md) | ~480 fit-ok cells per model |
+| 6 | Residualization + LDA | `lda_subspaces.py` | done | [docs/06](docs/06_lda_subspaces.md) | 1209 matched-population cells across 3 modes |
+| 7 | Residual hunting (audit) | `residual_hunting.py` | done | [docs/07](docs/07_audit_pipeline.md) | 0/90 cells with FDR-significant residual correlates |
+| 8 | Principal angles (audit) | `principal_angles.py` | done | [docs/07](docs/07_audit_pipeline.md) | Superposition rate 76–92% across cells |
+| 9 | JL distance preservation | `jl_distance.py` | done | [docs/07](docs/07_audit_pipeline.md) | Spearman ρ ≥ 0.9994 every cell |
+| 10 | Stage 2a — Fourier helix | `stage2a_fourier_helix.py` | done | [docs/08](docs/08_stage2a_fourier_helix.md) | 273 helix verdicts across models |
+| 11 | Stage 2b — Spread-aware d_SW | `stage2b_dsw_spread_aware.py` | done | [docs/09](docs/09_stage2b_dsw_spread_aware.md) | 2561 cells with d_SW Spearman ρ |
+| 12 | Stage 2c — Bayesian GPLVM | `stage2c_gplvm.py` | **fix-verified, ready to relaunch** | — | 1463 eligible cells across all 3 models |
+| 13 | Stage 3 — Ownership test | (next) | pending | — | Orthogonalise against algebraic correlates |
+| 14 | Stage 4 — Causal ablation | (smoke-validated) | pending | — | Δlogit on first answer token |
+
+**Today's smoke validation (2026-05-17):** on `gpt-j-6b/multiplication/off/L14/ans_units` we confirmed Stage 2c picks K4_Torus by ~73,000 nats over runner-up, and a manual Stage-4-style ablation showed the torus is causally used — zeroing the 2D torus subspace dropped accuracy 9% while zeroing a random 2D subspace dropped 0%. The geometry is real **and** load-bearing.
 
 ---
 
@@ -34,77 +38,70 @@ We test whether the geometric structure a linear probe finds for an arithmetic c
 
 For each (model, task, layer, concept, mode) cell on the per-model correct subset:
 
-**(a) CCSVD** — Step 5. Per-value centroids → between-class scatter → SVD → 1000-permutation null filter → orthonormal basis `B ∈ ℝ^{4096 × r}`.
+**(a) CCSVD** — Step 5. Per-value centroids → between-class scatter → SVD → 1000-perm null → orthonormal basis `B ∈ ℝ^{4096 × r}`.
 
-**(b) LDA refinement** — Step 6. Generalised eigenproblem `S_B w = λ S_T w`, λ ∈ [0,1]. Two placements per cell:
-- *Option A (headline)* — LDA inside the CCSVD subspace. N/r ≈ 100+ → eigenvalues trustworthy.
-- *Option B (audit)* — LDA in the full 4096-D residualised space with Ledoit-Wolf / OAS shrinkage. Eigenvalue magnitudes not cited; only directions and `n_sig`. Cosine similarity vs A reported per cell.
+**(b) LDA refinement** — Step 6. Generalised eigenproblem `S_B w = λ S_T w`, two placements per cell:
+- *Option A (headline)* — LDA inside the CCSVD subspace.
+- *Option B (audit)* — LDA in the full 4096-D residualised space with Ledoit-Wolf / OAS shrinkage.
 
-**(c) Significance** — dual criterion `n_sig = min(n_sig_perm, n_sig_cv)`:
-- `n_sig_perm` — sequential 99th-percentile permutation null over 1000 label shuffles.
-- `n_sig_cv` — 5-fold k-NN classification accuracy with the one-SE rule.
+**(c) Significance** — `n_sig = min(n_sig_perm, n_sig_cv)` (1000-perm null + 5-fold k-NN with one-SE rule).
 
-**Residualization modes** — Step 6 runs three modes in parallel and produces a matched-population comparison table:
-- `off` — raw activations.
-- `answer` — OLS-regress activations on the gold answer, keep residual. Carves out `ans_*` and `answer` concepts (circular).
-- `norm` — OLS-regress on `||x||₂`, keep residual. Carves out `ans_magnitude_tier`.
+**Residualization modes**: `off` / `answer` / `norm`. The aggregator produces matched-population comparisons.
 
 ### Audit (Steps 7–9, done)
 
-Three audit phases between Stage 1 and Stage 2. Their job is to honestly answer:
-- "Have we captured every linearly organised concept?" — *Step 7 (residual hunting).*
-- "Do concept subspaces overlap, and which Stage-3 tests will be load-bearing?" — *Step 8 (principal angles).*
-- "Does our union-of-concepts subspace preserve the pairwise geometry?" — *Step 9 (JL distance preservation).*
+- **Step 7 — Residual hunting**: variance budget per cell; randomised SVD on residual; Marchenko-Pastur cliff; 1000-perm null on top-`n_above_mp` directions × every metadata column; BH-FDR.
+- **Step 8 — Principal angles**: all-pair angles between LDA-A concept subspaces; 1000-trial empirical baseline; superposition flag.
+- **Step 9 — JL distance preservation**: all `N(N−1)/2` pairs (no subsampling); Spearman + Pearson + Pythagorean check in fp64.
 
-**Step 7 — Residual hunting** (per (model, task, mode, layer) cell, 2 union variants each):
-- Union variants: `merged` = SVD-orthonormalisation of (CCSVD ∪ LDA-A) bases + mode-specific β scalar direction (β_answer for `off`; β_norm + β_answer for `norm`); `generous` = `merged` ∪ LDA-B (audit-only).
-- Project X onto V_all; randomised SVD on the residual → top 500 eigenvalues.
-- Marchenko-Pastur cliff: trace-based σ²; `n_above_mp`; `mp_reliable_flag = (γ < 0.7)`.
-- Correlation sweep (merged only — LDA-B dominates `generous` with N/d noise, so its residual is not swept): top n_above_mp directions × every metadata column + derived columns (carry interactions, mod-10 sums, partial-product cross terms, predicted-digit features); observed Spearman + Pearson, 1000-permutation null, Benjamini-Hochberg FDR across the grid.
-- Stage 3 correlate-set unions pre-computed per task target (`ans_units`, `ans_tens`, `answer`, `carry_units`).
+### Stage 2a — Fourier helix (done)
 
-**Step 8 — Principal angles** (per cell):
-- All `C(K, 2)` pairs of LDA-A bases (orthonormalised on load).
-- Principal angles via SVD of B_a @ B_b.T.
-- 1000-trial empirical random baseline per (min(dim_a, dim_b), max(dim_a, dim_b)), cached on disk across runs.
-- Superposition flag: `angle_1 < baseline_p5 − 10°`. Per-pair empirical p-value and BH-FDR.
+Per-cell discover-then-fit on per-value centroids:
+1. **Discover** period via Whittle log-likelihood (improper flat prior on log-P).
+2. **Fit** circle/helix Bayesian model; verdict ∈ {helix, circle, none, sparse_value_grid, low_K, period_inconsistent}.
+3. Two-axis significance via 1000-perm null; BH-FDR.
 
-**Step 9 — JL distance preservation** (per cell, both variants):
-- All `N(N−1)/2` pairs, no subsampling.
-- Pairwise distances in full 4096-D and projected k-D, batched on GPU.
-- Spearman ρ + Pearson r + mean/max relative error + distance-variance-explained.
-- Full-pair Pythagorean check in float64 on GPU.
+### Stage 2b — Spread-aware Mahalanobis `d_SW` (done)
 
-### Audit headlines (production run, 2026-05-12)
+For each cell, compute the spread-aware Mahalanobis distance between every value-pair; Spearman correlation against the cyclic ground-truth distance. Tests whether the "geometry" is just a noise artefact at small per-class spread.
 
-90 cells (3 models × 2 tasks × 3 modes × 5 layers); 0 cells failed; 270 cell evaluations across the three steps.
+### Stage 2c — Bayesian manifold via point-cloud GPLVM (current)
 
-| Headline | Number |
-|---|---|
-| Variance captured by named-concept union (mode=off, merged, median per model) | GPT-J 0.866 / Llama 0.858 / Pythia 0.949 on addition; 0.739 / 0.755 / 0.874 on multiplication |
-| FDR-significant residual correlates after 1000-perm BH (|ρ_s| > 0.15 AND q < 0.05) | **0 / 90 cells** |
-| Median superposition rate across concept pairs | 80% on addition; 90% on multiplication |
-| Pairwise-distance preservation Spearman ρ (mode=off, merged) | ≥ 0.9994 every cell; addition median 0.99996; multiplication median 0.99963 |
-| MP cliff regime | Reliable (γ < 0.7) on every addition cell; unreliable (γ > 1) on every multiplication cell |
-| Total chained wall time | ~13 hours on 6 concurrent A6000s |
+For each eligible cell on the **Union(LDA-A, CCSVD)** subspace:
+1. Project all correct activations onto B_u (typically 4096 → 6–18 dims).
+2. Fit an exact GPLVM with strong-Wolfe LBFGS on the full per-cell point cloud.
+3. **Six kernels compete**:
 
-The full per-cell numbers, the cross-mode breakdown, the mathematical framework, and the analysis appendix live in [docs/07_audit_pipeline.md](docs/07_audit_pipeline.md) (3,060 lines).
-
-### Stages 2–4 (Steps 10–12, planned)
-
-**Stage 2** — Bayesian manifold characterisation: (a) centroid Fourier helix, (b) spread-aware Mahalanobis `d_SW`, (c) Bayesian GPLVM, (d) RBF-precision VAE.
-**Stage 3** — Ownership test via orthogonalisation against pre-registered algebraic correlates; re-run Stage 2.
-**Stage 4** — Causal ablation: raw vs orthogonalised subspace ablation; measure Δlogit on first answer token.
-
-### Headline matrix to populate
-
-|  | Addition | Multiplication |
+| # | Kernel | Hypothesis |
 |---|---|---|
-| Operand | predicted owned (trivial) | predicted owned (trivial) |
-| Intermediate | TEST | predicted inherited (Phase H from arithmetic-geometry replicated 419 / 419) |
-| Output | TEST | TEST |
+| K1 | RBF | smooth 1D curve |
+| K2 | Periodic | 1D circle |
+| K3 | Periodic + Linear | helix (d=2, linear on orthogonal axis) |
+| K4 | Torus | two periods, d=2 |
+| K5 | Concentric | two harmonics at same period, d=1 |
+| K6 | Periodic + RBF | circle + smooth non-linear axis, d=2 |
 
-Either Finding A (asymmetric ownership across tasks) or Finding B (uniform inheritance) is publishable — the pipeline is the constant.
+4. **Verdict gate** — winner must pass all three:
+   - BF gap ≥ 10 nats (K ≤ 10) / 5 nats (K ≥ 11)
+   - 3-seed log-likelihood agreement within 1 nat
+   - 5-fold hold-out MSE ≤ runner-up's MSE − 1 SE
+
+5. **Significance** — 1000-perm column-shuffle null on the winner only; global BH-FDR across cells.
+6. **Dim-only fallback** — for cells failing the gate, report ARD `p(d ≥ k)` and bootstrap-PR `d̂` (1–5). Cells with `d̂ ≥ 1.5` or `P(d≥1) ≥ 0.95` get a `dim_only` verdict.
+7. **Confidence tier** — `HIGH` / `MEDIUM` / `LOW` / `DISCOVERY_ONLY` per plan §C.10.
+
+**Configuration (locked 2026-05-17):**
+- `SUBSAMPLE_N_MAX = 10000` (full per-cell N)
+- `JITTER_INIT = 1e-4`, `JITTER_MAX = 1e-1`
+- LBFGS with **`line_search_fn="strong_wolfe"`** (root fix — composite kernels deterministically fail without this)
+- `parallel=True` on `fit_kernel_three_seeds` + `holdout_mse` → CUDA-stream parallelism on 3 seeds and 5 folds
+- BIC penalty includes latent dimension count
+- K3 d=2 with `half_normal(0.3)` outputscale prior on the linear arm
+
+### Stages 3 and 4 (planned)
+
+- **Stage 3 (Ownership):** for each cell with positive Stage 2c verdict, orthogonalise B_u against the pre-registered correlate set (e.g. for `ans_units` multiplication: `a, b, units(a), units(b), partial_product_units, carry_units`). Re-run Stage 2c. Verdict ∈ {owned, inherited, ambiguous}.
+- **Stage 4 (Causal):** intervene at the layer where the geometry lives; ablate `B_u` and the GPLVM-identified subspace; measure Δlogit on the first answer token vs random-subspace control of matching rank. Pre-validated today on `ans_units` mult.
 
 ---
 
@@ -119,11 +116,7 @@ Either Finding A (asymmetric ownership across tasks) or Finding B (uniform inher
 | Headline layer | 14 | 16 | 16 |
 | Weights on disk | ~23 GB | ~15 GB | ~13 GB |
 
-**Tasks.** Addition `a + b`, `a, b ∈ [0, 99]`, 10,000 problems. Multiplication `a × b`, same range, 3,023 cross-model single-token intersection.
-
-**Correctness.** First-answer-token match against the gold first-token id (precomputed in Step 1).
-
-**Per-model correct subsets (the population every later step runs on):**
+**Per-model correct subsets:**
 
 | Model | Addition | Multiplication |
 |---|---:|---:|
@@ -131,49 +124,69 @@ Either Finding A (asymmetric ownership across tasks) or Finding B (uniform inher
 | Llama 3.1 8B | 9,963 / 10,000 (99.63 %) | 2,927 / 3,023 (96.82 %) |
 | Pythia 6.9B | 7,718 / 10,000 (77.18 %) | 2,757 / 3,023 (91.20 %) |
 
+**Stage 2c eligible cells** (Stage 2a verdict ∈ {helix, circle, none, sparse_value_grid} AND both LDA-A and CCSVD bases on disk):
+
+| Model | Cells |
+|---|---:|
+| GPT-J 6B | 497 |
+| Llama 3.1 8B | 491 |
+| Pythia 6.9B | 475 |
+| **Total** | **1,463** |
+
 ---
 
 ## 4. Repository layout
 
 ```
 emnlp2026/
-├── plan.md                              # plan v6 — source of truth for stage definitions, thresholds, pre-registration
+├── plan.md                              # plan v6 — source of truth
 ├── README.md                            # this file
-├── config.yaml                          # paths, models, dataset, tokenization, eval, ccsvd, lda, residualization
+├── config.yaml                          # paths, models, dataset, eval, ccsvd, lda, residualization
 │
 ├── check_tokenization_limits.py         # Step 1
 ├── generate_datasets.py                 # Step 2
 ├── eval_and_extract.py                  # Step 3 (activation extraction)
-├── run_eval_and_extract.sbatch          # Step 3 SLURM array
 ├── build_embeddings.py                  # Step 4 (UMAP + t-SNE)
 ├── select_and_plot_embeddings.py        # Step 4 plotter
 │
-├── ccsvd_subspaces.py                   # Step 5 (CCSVD); Step 6 re-fits with --mode flag
+├── ccsvd_subspaces.py                   # Step 5 (CCSVD)
 ├── check_ccsvd_toys.py                  # Step 5 toys
-├── run_ccsvd_subspaces.sbatch           # Step 5 SLURM array
 ├── plot_ccsvd_subspaces.py              # Step 5 plotter
 │
 ├── residualize_activations.py           # Step 6 phase 1 — OLS residualisation cache
 ├── lda_subspaces.py                     # Step 6 fitter — Option A + Option B
-├── compare_residualization_modes.py     # Step 6 cross-mode + A↔B aggregator
+├── compare_residualization_modes.py     # Step 6 cross-mode aggregator
 ├── check_lda_toys.py                    # Step 6 toys
-├── run_step6.sbatch                     # Step 6 SLURM array (residualise → CCSVD re-fit → LDA, all 3 modes)
-├── run_step6_aggregate.sbatch           # Step 6 dependent CPU aggregator
 │
-├── check_step6_complete.py              # Step 7/8/9 pre-flight: verifies Step 6 outputs are complete
 ├── residual_hunting.py                  # Step 7 worker
 ├── principal_angles.py                  # Step 8 worker
 ├── jl_distance.py                       # Step 9 worker
-├── aggregate_residual_hunting.py        # Step 7 aggregator
-├── aggregate_principal_angles.py        # Step 8 aggregator
-├── aggregate_jl_distance.py             # Step 9 aggregator
-├── check_audit_pipeline_toys.py         # Combined toys for Steps 7+8+9
-├── run_step7.sbatch                     # Step 7 SLURM array (6 array tasks, max 3 concurrent A6000s)
-├── run_step8.sbatch                     # Step 8 SLURM array (depends on Step 7 outputs)
-├── run_step9.sbatch                     # Step 9 SLURM array (depends on Step 7 outputs)
-├── run_step7_aggregate.sbatch           # Step 7 dependent CPU aggregator
-├── run_step8_aggregate.sbatch           # Step 8 dependent CPU aggregator
-├── run_step9_aggregate.sbatch           # Step 9 dependent CPU aggregator
+├── aggregate_*.py                       # per-step aggregators
+├── check_audit_pipeline_toys.py         # combined toys for Steps 7+8+9
+├── check_step6_complete.py              # Step 7/8/9 pre-flight
+│
+├── stage2a_fourier_helix.py             # Stage 2a worker
+├── aggregate_stage2a.py                 # Stage 2a aggregator
+├── check_stage2a_toys.py                # Stage 2a toys
+│
+├── stage2b_dsw_spread_aware.py          # Stage 2b worker
+├── aggregate_stage2b_dsw.py             # Stage 2b aggregator
+├── check_stage2b_toys.py                # Stage 2b toys
+│
+├── stage2c_gplvm.py                     # Stage 2c worker
+├── stage2c_kernels.py                   # 6-kernel zoo
+├── aggregate_stage2c.py                 # Stage 2c aggregator
+├── check_stage2c_toys.py                # Stage 2c toys
+├── configs/stage2c.yaml                 # toy-calibrated BF thresholds + ARD epsilon
+│
+├── sbatch/                              # all 18 SLURM scripts (organised 2026-05-17)
+│   ├── run_eval_and_extract.sbatch
+│   ├── run_ccsvd_subspaces.sbatch
+│   ├── run_step{6,7,8,9}.sbatch                 + per-step aggregators
+│   ├── run_stage2a.sbatch                       + run_stage2a_aggregate.sbatch
+│   ├── run_stage2b.sbatch                       + run_stage2b_aggregate.sbatch
+│   ├── run_stage2c_{gptj,llama,pythia}.sbatch   # per-model, partition-aware
+│   └── run_stage2c_aggregate.sbatch
 │
 ├── docs/                                # one Markdown file per finished step
 │   ├── 01_tokenization_limits.md
@@ -182,13 +195,15 @@ emnlp2026/
 │   ├── 04_umap_tsne_embeddings.md
 │   ├── 05_ccsvd_subspaces.md
 │   ├── 06_lda_subspaces.md
-│   └── 07_audit_pipeline.md             # combined Steps 7/8/9 report (3,060 lines)
+│   ├── 07_audit_pipeline.md             # Steps 7/8/9 combined
+│   ├── 08_stage2a_fourier_helix.md
+│   └── 09_stage2b_dsw_spread_aware.md
 │
 └── data/                                # symlink → /data/user_data/anshulk/emnlp2026
     ├── models/                          # 51 GB weights
     ├── data/raw/                        # Step 2 outputs (problems CSVs)
-    ├── activations/                     # Step 3 (.npy per (model, task, layer))
-    ├── answers/                         # Step 3 (per-problem predictions + correctness)
+    ├── activations/                     # Step 3 .npy per (model, task, layer)
+    ├── answers/                         # Step 3 per-problem predictions + correctness
     └── results/
         ├── tokenization_limits/         # Step 1
         ├── embeddings/                  # Step 4
@@ -198,18 +213,19 @@ emnlp2026/
         ├── residual_hunting/            # Step 7
         ├── principal_angles/            # Step 8
         ├── jl_distance/                 # Step 9
-        └── figures/                     # plots (off-path; can regenerate from CSVs)
+        ├── stage2a_fourier_helix/       # Stage 2a
+        ├── stage2b_dsw/                 # Stage 2b
+        ├── stage2c_gplvm/               # Stage 2c (currently empty — relaunching post-fix)
+        └── figures/
 ```
-
-The `data/` symlink points at cluster scratch (`/data/user_data/anshulk/emnlp2026`); the home directory holds only code and docs.
 
 ---
 
 ## 5. How to run
 
-All scripts read `config.yaml` for paths, model lists, prompts, and settings. SLURM scripts use the absolute conda env Python (`/data/user_data/anshulk/miniconda3/envs/geometry/bin/python`) to avoid system-Python (3.9) shadowing on compute nodes.
+All scripts read `config.yaml`. SLURM scripts use the absolute env Python (`/data/user_data/anshulk/miniconda3/envs/geometry/bin/python`) to avoid system-Python (3.9) shadowing on babel compute nodes.
 
-### Steps 1–6 (already done; commands here for reference)
+### Steps 1–9 + Stage 2a + Stage 2b (already done; commands for reference)
 
 ```bash
 # Step 1 — tokenization preflight (CPU, minutes)
@@ -219,53 +235,58 @@ python check_tokenization_limits.py --config config.yaml
 python generate_datasets.py --config config.yaml
 
 # Step 3 — activation extraction (1 GPU per model)
-sbatch run_eval_and_extract.sbatch        # array=0-2
+sbatch sbatch/run_eval_and_extract.sbatch       # array=0-2
 
 # Step 4 — UMAP + t-SNE (CPU, ~78 min)
 python build_embeddings.py --config config.yaml
-python select_and_plot_embeddings.py --config config.yaml
 
-# Step 5 — CCSVD (1 GPU per model, ~70-90 min/task)
-python check_ccsvd_toys.py
-sbatch run_ccsvd_subspaces.sbatch
+# Step 5 — CCSVD
+sbatch sbatch/run_ccsvd_subspaces.sbatch
 
-# Step 6 — Residualisation + LDA (1 GPU per model, ~3-6 h/task)
-python check_lda_toys.py
-JID=$(sbatch --parsable run_step6.sbatch)
-sbatch --dependency=afterok:$JID run_step6_aggregate.sbatch
+# Step 6 — Residualisation + LDA
+JID=$(sbatch --parsable sbatch/run_step6.sbatch)
+sbatch --dependency=afterok:$JID sbatch/run_step6_aggregate.sbatch
+
+# Steps 7-9 — audit
+S7=$(sbatch --parsable sbatch/run_step7.sbatch)
+sbatch --dependency=afterok:$S7 sbatch/run_step7_aggregate.sbatch
+S8=$(sbatch --parsable --dependency=afterok:$S7 sbatch/run_step8.sbatch)
+sbatch --dependency=afterok:$S8 sbatch/run_step8_aggregate.sbatch
+S9=$(sbatch --parsable --dependency=afterok:$S7 sbatch/run_step9.sbatch)
+sbatch --dependency=afterok:$S9 sbatch/run_step9_aggregate.sbatch
+
+# Stage 2a — Fourier helix
+J2A=$(sbatch --parsable sbatch/run_stage2a.sbatch)
+sbatch --dependency=afterok:$J2A sbatch/run_stage2a_aggregate.sbatch
+
+# Stage 2b — Spread-aware d_SW
+J2B=$(sbatch --parsable sbatch/run_stage2b.sbatch)
+sbatch --dependency=afterok:$J2B sbatch/run_stage2b_aggregate.sbatch
 ```
 
-### Steps 7–9 (audit phases, ready to launch)
+### Stage 2c (current — three per-model jobs + aggregator)
 
 ```bash
-# Pre-flight: confirm Step 6 outputs are complete (read-only)
-python check_step6_complete.py --config config.yaml
+# Toy validation (CPU+GPU, ~3 min)
+python check_stage2c_toys.py --quick
 
-# Toys: validate Step 7, 8, 9 algorithms on synthetic data (CPU+GPU, ~3 min)
-python check_audit_pipeline_toys.py
+# Single-cell smoke (optional)
+python stage2c_gplvm.py --config config.yaml \
+    --model gpt-j-6b --task multiplication --mode off --layer 14 --concept ans_units
 
-# Step 7 — Residual hunting (must run first; Steps 8 and 9 consume its union bases)
-S7=$(sbatch --parsable run_step7.sbatch)
-sbatch --parsable --dependency=afterok:$S7 run_step7_aggregate.sbatch
-
-# Step 8 — Principal angles (parallel with Step 9)
-S8=$(sbatch --parsable --dependency=afterok:$S7 run_step8.sbatch)
-sbatch --parsable --dependency=afterok:$S8 run_step8_aggregate.sbatch
-
-# Step 9 — JL distance preservation
-S9=$(sbatch --parsable --dependency=afterok:$S7 run_step9.sbatch)
-sbatch --parsable --dependency=afterok:$S9 run_step9_aggregate.sbatch
+# Production sweep — 3 per-model jobs + aggregator
+JID_GPT=$(sbatch --parsable sbatch/run_stage2c_gptj.sbatch)     # 8 tasks general/normal
+JID_LLA=$(sbatch --parsable sbatch/run_stage2c_llama.sbatch)    # 8 tasks preempt
+JID_PYT=$(sbatch --parsable sbatch/run_stage2c_pythia.sbatch)   # 8 tasks preempt
+sbatch --dependency=afterany:$JID_GPT:$JID_LLA:$JID_PYT \
+       sbatch/run_stage2c_aggregate.sbatch
 ```
 
-**Job-array geometry.** Each worker sbatch uses `--array=0-5%3`: 6 tasks (3 models × 2 tasks), max 3 concurrent (one A6000 each). Each array task processes all 3 modes × 5 layers = 15 cells sequentially. All sbatch files specify `--time=2-00:00:00` (48 h cluster max) as a safety margin; expected wall is ~3 h for Step 7, ~30 min for Step 8, ~1.5 h for Step 9.
+**Per-cell time at production N (with strong_wolfe, parallel streams, 2-worker GPU packing):**
+- Addition cells (N≈8k): ~30–60 min/cell
+- Multiplication cells (N≈2.7k): ~5–10 min/cell
 
-**Smoke test a single cell** (recommended before the full sweep):
-
-```bash
-python residual_hunting.py --config config.yaml --model gpt-j-6b --task multiplication --mode off --layer 14
-python principal_angles.py --config config.yaml --model gpt-j-6b --task multiplication --mode off --layer 14
-python jl_distance.py --config config.yaml --model gpt-j-6b --task multiplication --mode off --layer 14
-```
+**Expected wall time:** GPT-J ~24–48 h on 8 general GPUs; Llama/Pythia in parallel on preempt. Aggregator ~5 min once all three finish.
 
 ### Standing rules
 
@@ -274,6 +295,7 @@ python jl_distance.py --config config.yaml --model gpt-j-6b --task multiplicatio
 - Atomic writes (tempfile + `os.replace`) and resume-by-metadata on every per-cell job.
 - Spearman ρ AND Pearson r reported side-by-side for every correlation measurement.
 - Permutation / random-baseline trials: 1000 everywhere.
+- BIC parsimony penalty in Stage 2c counts hyperparameters **plus** latent dimensions, so kernels with d=2 are penalised vs d=1.
 
 ---
 
@@ -281,48 +303,32 @@ python jl_distance.py --config config.yaml --model gpt-j-6b --task multiplicatio
 
 Every step writes a manifest (sha256 of inputs and outputs, library versions, config sha, total runtime). Every per-cell job writes a `metadata.json` with `computation_status: "complete"` so reruns are idempotent.
 
-### Step 5 per-cell artifacts
-Under `data/results/ccsvd_subspaces/{model}/{task}/layer_{LL}/{concept}/`:
-`basis.npy (4096, r)`, `eigenvalues.npy`, `null_eigenvalues.npy (1000, m-1)`, `threshold_99.npy`, `centroids.npy`, `centroids_proj.npy`, `projected_acts.npy`, `cv_per_fold.npy`, `meta.json`.
+### Stage 2c per-cell artifacts
+Under `data/results/stage2c_gplvm/{model}/{task}/mode_{mode}/layer_{LL}/{concept}/`:
+- `gplvm_results.csv` (single summary row: winner_kernel, BF gap, p_2c, q_2c, verdict, tier, per-kernel adj_ml)
+- `elbo_per_kernel_seed.npy` (6 × 3 matrix)
+- `mu_stack.npy`, `noise_scalar.npy`, `Lambda_full.npy` (centroid summaries)
+- `perm_null.npy` (1000-perm BIC-adjusted log-lik distribution)
+- `bootstrap_d_hat.npy` (200-draw participation ratio)
+- `kernel_hyperparams.json` (final periods, lengthscales, noise per winning seed)
+- `ard_posterior.json` (per-axis active probabilities + bootstrap d̂)
+- `union_basis_meta.json` (LDA + CCSVD contributions + SVD info)
+- `metadata.json`
 
-### Step 6 per-cell artifacts
-Under `data/results/lda_subspaces/{subspace_lda,full_lda}/mode_{mode}/{model}/{task}/layer_{LL}/{concept}/`:
-`lda_basis_subspace.npy (n_sig, r)` *(Option A only)*, `lda_basis_full.npy (4096, n_sig)`, `lda_eigenvalues.npy`, `null_lda_eigenvalues.npy (1000, K-1)`, `lda_threshold_99.npy`, `cohen_d.npy`, `cv_accuracy_curve.npy`, `cv_per_fold.npy`, `bootstrap_lambda1.npy` *(A only)*, `meta.json`.
-
-Cross-mode aggregates under `data/results/lda_subspaces/comparison/`: `cross_mode_summary.csv`, `cross_mode_alignment.csv`, `cross_mode_lambda_deltas.csv`, `cross_mode_accuracy_deltas.csv`, `matched_population_cells.csv` (1209 rows where all 3 modes succeeded), `a_vs_b_alignment.csv`, `carveout_log.csv` (270 rows).
-
-### Step 7 per-cell artifacts
-Under `data/results/residual_hunting/{model}/{task}/mode_{mode}/layer_{LL}/`:
-`union_basis_merged.npy (k_merged, 4096)`, `union_basis_generous.npy (k_generous, 4096)`, `eigenvalues_{variant}.npy`, `eigenvectors_{variant}.npy (500, 4096)`, `mp_info_{variant}.json`, `correlation_sweep_merged.csv`, `union_meta.json`, `stage3_unions/union_correlates_<target>.npy + .json`, `metadata.json`.
-
-Per-model summaries: `data/results/residual_hunting/{model}/summary_{model}_{task}_mode_{mode}.csv` (2 rows per cell — one per variant).
-
-Aggregator outputs under `data/results/residual_hunting/comparison/`: `summary_all.csv`, `var_explained_cross_mode.csv`, `n_above_mp_cross_mode.csv`, `k_union_cross_mode.csv`, `gamma_cross_mode.csv`, `residual_top_correlate_cross_mode.csv`, `variant_delta.csv`, `summary_with_matched_count.csv`.
-
-### Step 8 per-cell artifacts
-Under `data/results/principal_angles/{model}/{task}/mode_{mode}/layer_{LL}/`:
-`angles_pairwise.csv` (one row per pair: concept_a, concept_b, tier_a, tier_b, dim_a, dim_b, angle_1..angle_5, angle_median, angle_max, baseline_theta1_{mean,std,p1,p5}, perm_p, superposition_flag, fdr_q), `self_angles.csv` (sanity check: every concept basis vs itself, max angle should be < 1°), `metadata.json`.
-
-Per-model summary: `data/results/principal_angles/{model}/summary_{model}_{task}_mode_{mode}.csv`. Shared baseline cache at `data/results/principal_angles/random_baseline_cache.npy`.
-
-Aggregator outputs under `data/results/principal_angles/comparison/`: `pairwise_all.csv`, `summary_all.csv`, `superposition_rate_by_cell.csv`, `superposition_by_tier_pair.csv`, `cross_mode_superposition.csv`.
-
-### Step 9 per-cell artifacts
-Under `data/results/jl_distance/{model}/{task}/mode_{mode}/layer_{LL}/`:
-`jl_metrics_{merged,generous}.json` (Spearman ρ, Pearson r, mean/max relative error, distance variance explained, Pythagorean max/mean relative error + violation count), `d_full_{variant}.npy` + `d_proj_{variant}.npy` *(when N ≤ 5000)* or `d_full_sample_{variant}.npy` + `d_proj_sample_{variant}.npy` *(10k subsample for plotting; metrics computed on all pairs regardless)*, `d_hist_{variant}.npz` (2-D histogram of d_full vs d_proj), `metadata.json`.
-
-Per-model summary: `data/results/jl_distance/{model}/summary_{model}_{task}_mode_{mode}.csv`.
-
-Aggregator outputs under `data/results/jl_distance/comparison/`: `summary_all.csv`, `spearman_cross_mode.csv`, `pearson_cross_mode.csv`, `distance_var_explained_cross_mode.csv`, `mean_rel_error_cross_mode.csv`, `max_rel_error_cross_mode.csv`, `pyth_max_rel_error_cross_cell.csv`, `variant_delta_jl.csv`.
+Aggregator outputs under `data/results/stage2c_gplvm/comparison/`:
+- `gplvm_all.csv`, `verdict_counts_by_cell.csv`, `cross_mode_kernel_survival.csv`
+- `kernel_concept_matrix.csv`, `dim_only_table.csv`
+- `stage2a_2b_2c_survival.csv` (joins all three stages), `headline_tier_cells.csv`
+- `manifest.json`
 
 ---
 
 ## 7. Environment
 
 - **Conda env:** `geometry` at `/data/user_data/anshulk/miniconda3/envs/geometry`
-- **Python** 3.11.15 · **PyTorch** 2.10.0 + CUDA 12.8 · **Transformers** 5.3.0 · **NumPy** 2.2.6 · **scikit-learn** 1.8.0 · **scipy** (latest in env) · **cupy** 14.0.1 · **cuML** 26.02
-- **GPU:** A6000 (48 GB VRAM, NVLink). Step 3 ran at batch=512 with 96–100 % util on 6–8B models in bf16. Step 5 runs SVD on GPU via `torch.linalg.svd`. Step 6 keeps a 4096² lower-Cholesky factor on GPU per (task, layer, mode). Steps 7/9 use CuPy projection and float64 Pythagorean check.
-- **SLURM partition:** `general`. Worker sbatch requests 1 A6000 + 16 CPUs + 128 GB + 2-day wall. Aggregator sbatch (CPU-only) requests 8 CPUs + 64 GB + 2-day wall.
+- **Python** 3.11.15 · **PyTorch** 2.10.0 + CUDA 12.8 · **GPyTorch** 1.15.2 · **Transformers** 5.3.0 · **NumPy** 2.2.6 · **scikit-learn** 1.8.0 · **CuPy** 14.0.1
+- **GPU:** A6000 (48 GB VRAM). Stage 2c uses TF32 matmul + FP32 inner Cholesky for ~30× speedup over FP64.
+- **SLURM partitions:** `general` (normal QoS, 2-day wall, 8 GPU/user cap) and `preempt` (preempt_qos, 31-day wall, 24 GPU/user cap).
 - **Important:** SLURM scripts use the absolute env Python path. `conda activate` alone is unreliable in batch contexts on babel compute nodes.
 
 ---
@@ -331,16 +337,19 @@ Aggregator outputs under `data/results/jl_distance/comparison/`: `summary_all.cs
 
 | Step | Compute | Wall | On-disk |
 |---|---|---|---|
-| 1 — tokenization | CPU | minutes | ~2 GB CSVs |
+| 1 — tokenization | CPU | minutes | ~2 GB |
 | 2 — dataset | CPU | seconds | ~30 MB |
-| 3 — activations | GPU (A6000 × 3) | 79 s | ~3.2 GB |
+| 3 — activations | GPU × 3 | 79 s | ~3.2 GB |
 | 4 — UMAP + t-SNE | CPU | 77.9 min | ~25 MB |
-| 5 — CCSVD | GPU (A6000 × 3) | ~70–90 min/task | ~3 GB |
-| 6 — Residualise + LDA | GPU (A6000 × 3) | ~3–6 h/task | residualised cache ~14 GB + LDA artifacts ~5–10 GB |
-| 7 — Residual hunting | GPU (A6000 × 6) | 17 min wall, 1.1 GPU-h total | 7.0 GB |
-| 8 — Principal angles | GPU (A6000 × 6) | 12.5 h wall, ~44 GPU-h total | 39 MB |
-| 9 — JL distance | GPU (A6000 × 6) | 57 min wall, 2.5 GPU-h total | 2.7 GB |
-| 10–12 — Stages 2–4 | GPU | plan v6 budget ~250 GPU-h | TBD |
+| 5 — CCSVD | GPU × 3 | ~70–90 min/task | ~3 GB |
+| 6 — Residualise + LDA | GPU × 3 | ~3–6 h/task | ~14 GB residualised + ~10 GB LDA |
+| 7 — Residual hunting | GPU × 6 | 17 min, 1.1 GPU-h | 7.0 GB |
+| 8 — Principal angles | GPU × 6 | 12.5 h, ~44 GPU-h | 39 MB |
+| 9 — JL distance | GPU × 6 | 57 min, 2.5 GPU-h | 2.7 GB |
+| 2a — Fourier helix | GPU × 6 | ~3 h, 17 GPU-h | ~1 GB |
+| 2b — d_SW | GPU × 6 | ~1.5 h, 9 GPU-h | ~500 MB |
+| 2c — GPLVM | GPU × 24 | ~24–48 h (post-fix estimate) | est. ~10 GB |
+| 3–4 — orthogonality + causal | GPU | est. 100–200 GPU-h | TBD |
 
 Models on disk: ~51 GB (23 GB GPT-J + 15 GB Llama + 13 GB Pythia).
 
@@ -349,6 +358,26 @@ Models on disk: ~51 GB (23 GB GPT-J + 15 GB Llama + 13 GB Pythia).
 ## 9. References
 
 - **Plan source of truth:** [plan.md](plan.md) (v6). Pre-registration (Part 12), per-stage thresholds (Part 14), week-by-week timeline (Part 11), risks/fallbacks (Part 21), reviewer-attack rebuttals (Part 23), figure/table list (Part 17).
-- **Steps 7–9 plan:** `~/.claude/plans/lets-write-a-perfect-wiggly-feigenbaum.md` — the audit-phases spec the current Step 7/8/9 implementations follow.
-- **Parent project:** [/home/anshulk/arithmetic-geometry/](/home/anshulk/arithmetic-geometry) — emnlp2026 is a rescope. Mirror its idioms (logger, config, doc skeleton, manifest schema, validation block). Steps 7–9 port Phase E, Phase F, and Phase JL respectively.
-- **External:** Kantamneni & Tegmark (2024) *Language Models Use Trigonometry to Do Addition* (KT 2024) — primary baseline for GPT-J × addition (reports 80.5 % accuracy; this work measures 84.15 % on `[0, 99]²`).
+- **Parent project:** [/home/anshulk/arithmetic-geometry/](/home/anshulk/arithmetic-geometry) — emnlp2026 is a rescope. Mirror its idioms (logger, config, doc skeleton, manifest schema, validation block).
+- **External:** Kantamneni & Tegmark (2024) *Language Models Use Trigonometry to Do Addition* (KT 2024) — primary baseline for GPT-J × addition.
+
+---
+
+## 10. Recent decisions / changelog
+
+**2026-05-17 — Stage 2c production-readiness fixes**
+- Fixed `noise_scalar` NameError in `analyze_cell` result-dict assembly (root cause of the 14-h zero-output sweep)
+- Reorganised all 18 sbatch files into `sbatch/` folder; deleted the dead `run_stage2c.sbatch` (24-task preempt-only generic, superseded by per-model files)
+- Enabled `line_search_fn="strong_wolfe"` in LBFGS (root fix for composite-kernel Cholesky failures at production N)
+- Bumped `JITTER_MAX` to 1e-1 (defensive)
+- Reverted K3 to d=2 with tighter `half_normal(0.3)` outputscale prior on linear arm
+- Added `dim_only` fallback for inconclusive cells (reports ARD `P(d≥k)` and bootstrap d̂ up to 5)
+- BIC adjustment now includes `d_latent` as effective parameter count
+- Smoke-validated K4_Torus causal: 2D ablation drops accuracy 9% on `ans_units` mult vs 0% for random 2D control
+- Split production into 3 per-model jobs: `gptj` on general/normal, `llama`+`pythia` on preempt
+
+**Earlier**
+- 2026-05-12 — Stage 2b spread-aware d_SW done across 2,561 cells
+- 2026-05-10 — Stage 2a Fourier helix done with 1000-perm Whittle null
+- 2026-05-08 — Audit Steps 7/8/9 complete: 0/90 cells have FDR-significant residual correlates
+- 2026-05-05 — Step 6 residualisation + LDA done across 3 modes

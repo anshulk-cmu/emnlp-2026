@@ -1,8 +1,8 @@
 # Step 6 — LDA refinement of CCSVD subspaces, with magnitude residualization and a full-space audit
 
 **Project:** From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models
+**Authors:** Anshul Kumar (CMU, primary), Deeksha Varshney (IIT Jodhpur, advisor), Manoj Kumar (IIT Roorkee, advisor), Barnabás Póczos (CMU, main advisor)
 **Carnegie Mellon University, May 2026**
-**Author:** Anshul Kumar
 
 ---
 

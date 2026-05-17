@@ -1,0 +1,17 @@
+bf_threshold_default_small_K: 10.0
+bf_threshold_default_large_K: 5.0
+ard_epsilon: 0.1
+subsample_n_max: 10000
+cg_max_cholesky_size: 12000
+cg_tolerance: 0.001
+cg_max_iterations: 2000
+calibration_record:
+  2C-A: true
+  2C-B: true
+  2C-C: false
+  2C-D: true
+  2C-E: true
+  2C-K: false
+  2C-F: false
+  2C-I: false
+  2C-J: true

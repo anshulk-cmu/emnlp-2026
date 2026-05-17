@@ -1,6 +1,8 @@
 # =============================================================================
 # EMNLP 2026 Pipeline Configuration
-# Project: From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in LMs
+# Project: From Linear Probes to Bayesian Manifolds: Geometry of Arithmetic in Language Models
+# Authors: Anshul Kumar (CMU, primary), Deeksha Varshney (IIT Jodhpur, advisor),
+#          Manoj Kumar (IIT Roorkee, advisor), Barnabás Póczos (CMU, main advisor)
 # Rescope of /home/anshulk/arithmetic-geometry under plan v6.
 # =============================================================================
 
