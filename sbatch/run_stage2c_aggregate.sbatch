@@ -1,8 +1,10 @@
 #!/bin/bash
 # =============================================================================
-# Stage 2c aggregator — CPU-only.
-# Concatenates per-cell gplvm_results.csv, applies BH-FDR on p_2c, downgrades
-# verdicts post-FDR, and writes comparison tables + manifest.
+# Stage 2c BSMI-R aggregator — CPU-only.
+# Concatenates per-cell gplvm_results.csv, applies BH-FDR on perm_p (and BY-FDR
+# as a sensitivity check), downgrades pre-FDR Tier-A claims that fail
+# q_BH <= alpha to Tier B, and writes comparison tables + manifest under
+# results/stage2c_gplvm/comparison/.
 # Launch via:  sbatch --dependency=afterok:$STAGE2C_JID run_stage2c_aggregate.sbatch
 # =============================================================================
 

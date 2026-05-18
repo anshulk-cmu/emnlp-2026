@@ -1,17 +1,58 @@
-bf_threshold_default_small_K: 10.0
-bf_threshold_default_large_K: 5.0
-ard_epsilon: 0.1
-subsample_n_max: 10000
-cg_max_cholesky_size: 12000
-cg_tolerance: 0.001
-cg_max_iterations: 2000
-calibration_record:
-  2C-A: true
-  2C-B: true
-  2C-C: false
-  2C-D: true
-  2C-E: true
-  2C-K: false
-  2C-F: false
-  2C-I: false
-  2C-J: true
+# BSMI-R (Bayesian Shape Manifold Inference with Refusal) configuration.
+# Reference: docs/gplvm.md, Stages 6, 14, 15, 17.
+
+# ─── Stage 17 — Tier-A decision thresholds ──────────────────────────────────
+# Evidence gap (nats) required for "decisive" Bayes factor (Kass-Raftery 5 nats
+# is the standard "very strong" cutoff; small-K cells get the stricter 10 nats).
+evidence_gap_nats: 5.0
+evidence_gap_nats_small_K: 10.0
+small_K_threshold: 6
+
+# Label alignment floor for Tier A (|rho| or |circ-rho|).
+alignment_threshold: 0.5
+
+# Holdout adequacy rule (Stage 12): winner_MSE <= epsilon_factor * min(others).
+# 1.10 = winner must be within 10 % of the best — RELAXED from the prior
+# "one-SE-better-than-runner-up" rule which over-rejected.
+holdout_epsilon_factor: 1.10
+
+# Persistent-homology tolerance (in standard deviations) before PH flags
+# "contradictory" (Stage 8). Loose by design — PH is one of nine modules.
+ph_tol_z: 2.0
+
+# ─── Stage 14 — Permutation test ────────────────────────────────────────────
+n_permutations: 10000         # tighter p-value resolution (p_min ≈ 1e-4)
+n_permutations_borderline: 50000  # optional further refinement near FDR boundary
+
+# ─── Stage 15 — Multiple-testing correction ─────────────────────────────────
+fdr_alpha: 0.10               # raised from 0.05 (FDR controls only Tier-A claims; 10 % is still strict)
+report_by_fdr: true
+
+# ─── Stage 5 — Period prior and multimodal-Laplace settings ─────────────────
+n_period_aliases: 3
+# W's prior variance is no longer a hand-picked knob — it is selected per cell
+# by empirical Bayes (logsumexp marginal-likelihood maximisation across the
+# uniform shape prior). Wider grid = less arbitrary.
+n_refined_audit_samples: 256
+
+# ─── Stage 13 — Seed and prior stability ────────────────────────────────────
+seeds: [42, 43, 44]
+alpha_priors_for_stability: [0.1, 1.0, 10.0]
+# Tweak 1: Tier-A gate uses cross-shape winner-identity stability — all 9
+# (seed × alpha) combinations must pick the same argmax shape. The old
+# `seed_log_evidence_std_max` threshold conflated prior-induced log Z shifts
+# with genuine instability and is no longer used.
+
+# ─── Stage 14 — Permutation statistic ───────────────────────────────────────
+# Tweak 2: T = (log_E_best_named − log_E_K0) + λ · |alignment(best, true_labels)|
+# λ scales |alignment| ∈ [0,1] to ~nats. With ~1000, alignment 0.99 contributes
+# ~990 nats — enough to dominate over noise in the evidence-gap component
+# under permutation.
+perm_alignment_lambda: 1000.0
+
+# ─── Stage 0 — Sufficient-statistic limits ─────────────────────────────────
+min_group_size: 30            # minimum n_v for a value to participate
+min_K_for_BSMIR: 4            # cells below this count short-circuit to low_K
+
+# Toy-suite calibration was removed; calibration of thresholds now happens
+# directly from production runs and is recorded in the aggregator manifest.

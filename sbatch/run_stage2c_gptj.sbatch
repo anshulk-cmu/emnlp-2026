@@ -1,19 +1,16 @@
 #!/bin/bash
 # =============================================================================
-# Stage 2c — GPT-J 6B on the general partition (no preemption).
+# Stage 2c BSMI-R — GPT-J 6B on the general partition (no preemption).
 #
-# 8 array tasks, 1 A6000 per task, 1 Python worker per GPU.
+# Pipeline: Bayesian Shape Manifold Inference with Refusal. Reference:
+# docs/gplvm.md. The new worker is label-collapsed (operates on per-value
+# means + within-label scatter, not the full N x N point cloud) so the heavy
+# Cholesky cost from the prior pipeline is gone. CPU-bound parts (PH, dim
+# estimation, permutations) dominate; we keep one A6000 per array task as a
+# placeholder for the GPU-aware path in case we add a GPU-backed evidence
+# audit later.
 #
-# Note (2026-05-17): the previous 2-worker-per-GPU packing failed with
-# `cudaErrorDevicesUnavailable` on most array tasks — without NVIDIA MPS the
-# CUDA driver doesn't reliably share device contexts between two processes
-# on the same GPU. Dropping to 1 worker per GPU is the safe, robust setup.
-#
-# Per-cell parallelism: `parallel=True` already enabled in analyze_cell —
-# 3 seeds + 5 hold-out folds run on separate CUDA streams.
-#
-# Expected wall time on 8 GPUs: ~24–48 hours for all 497 eligible GPT-J cells
-# (strong_wolfe LBFGS at production N adds wall vs the parent project).
+# 4 array tasks; each task processes its hashed cell stripe.
 # =============================================================================
 
 #SBATCH --job-name=emnlp_stage2c_gptj
@@ -24,13 +21,13 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=2-00:00:00
-#SBATCH --array=0-7
+#SBATCH --array=0-3
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=anshulk@andrew.cmu.edu
 
 set -euo pipefail
 
-ARRAY_SIZE=8
+ARRAY_SIZE=4
 ARRAY_IDX=$SLURM_ARRAY_TASK_ID
 CONFIG=/home/anshulk/emnlp2026/config.yaml
 MODEL=gpt-j-6b
@@ -45,9 +42,11 @@ cd /home/anshulk/emnlp2026
 PYTHON=/data/user_data/anshulk/miniconda3/envs/geometry/bin/python
 echo "[$(date)] PYTHON=$PYTHON"
 $PYTHON --version
-$PYTHON -c "import gpytorch, torch; print(f'gpytorch={gpytorch.__version__} torch={torch.__version__} cuda={torch.cuda.is_available()}')"
+$PYTHON -c "import numpy, pandas, sklearn; print(f'numpy={numpy.__version__} pandas={pandas.__version__} sklearn={sklearn.__version__}')"
+$PYTHON -c "import ripser; print(f'ripser={ripser.__version__}')" 2>&1 | head -1 || \
+  echo "[warn] ripser not installed; PH module will use the gudhi fallback or report status=no_ph_lib"
 
-# Single worker on this GPU processes its hashed cell stripe.
+# Single worker per array task processes its hashed cell stripe.
 $PYTHON stage2c_gplvm.py \
     --config "$CONFIG" \
     --model "$MODEL" \

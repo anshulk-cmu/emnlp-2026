@@ -24,11 +24,13 @@ Tests whether the geometric structure a linear probe finds for an arithmetic con
 | 9 | JL distance preservation | `jl_distance.py` | done | [docs/07](docs/07_audit_pipeline.md) | Spearman ρ ≥ 0.9994 every cell |
 | 10 | Stage 2a — Fourier helix | `stage2a_fourier_helix.py` | done | [docs/08](docs/08_stage2a_fourier_helix.md) | 273 helix verdicts across models |
 | 11 | Stage 2b — Spread-aware d_SW | `stage2b_dsw_spread_aware.py` | done | [docs/09](docs/09_stage2b_dsw_spread_aware.md) | 2561 cells with d_SW Spearman ρ |
-| 12 | Stage 2c — Bayesian GPLVM | `stage2c_gplvm.py` | **fix-verified, ready to relaunch** | — | 1463 eligible cells across all 3 models |
+| 12 | Stage 2c — BSMI-R (Bayesian Shape Manifold Inference with Refusal) | `stage2c_gplvm.py`, `stage2c_shapes.py`, `stage2c_modules.py` | **running 2026-05-18** | [docs/gplvm.md](docs/gplvm.md) | 497 eligible GPT-J cells, similar for Pythia / Llama |
 | 13 | Stage 3 — Ownership test | (next) | pending | — | Orthogonalise against algebraic correlates |
-| 14 | Stage 4 — Causal ablation | (smoke-validated) | pending | — | Δlogit on first answer token |
+| 14 | Stage 4 — Causal ablation + patching | `causal_validation.py`, `aggregate_stage4_causal.py` | **ready 2026-05-18** | — | M1 ablation + M2 patching at both subspace + geometry granularity |
 
-**Today's smoke validation (2026-05-17):** on `gpt-j-6b/multiplication/off/L14/ans_units` we confirmed Stage 2c picks K4_Torus by ~73,000 nats over runner-up, and a manual Stage-4-style ablation showed the torus is causally used — zeroing the 2D torus subspace dropped accuracy 9% while zeroing a random 2D subspace dropped 0%. The geometry is real **and** load-bearing.
+**Stage 2c BSMI-R (2026-05-18 launch).** Three SLURM array jobs (4 stripes each on A6000) running on all three models. Pipeline reference: [docs/gplvm.md](docs/gplvm.md). Core principle: every module returns evidence — no early gates. Empirical-Bayes α̂ per cell, 10,000-permutation null, family-level Bayes factor, ripser-backed persistent homology, 5-fold + LOO holdout CV. Output tiers: `tier_A_named_shape` / `tier_A_named_family` / `tier_B_family` / `tier_C_dim_only` / `tier_D_refuse`.
+
+**Stage 4 causal (2026-05-18, sbatch ready).** Tests two questions on every BSMI-R cell with a declared shape: **(M1)** does ablating the subspace at the cell's layer hurt the gold-token logit more than ablating a random subspace of matching rank? **(M2)** does patching a donor's projection onto the subspace into a recipient pull the recipient toward the donor's gold token? Both methods run at **both** the union basis `B_u` granularity AND the BSMI-R recovered geometry `Q_geom` granularity, with 5 random-subspace controls each.
 
 ---
 
@@ -65,38 +67,51 @@ Per-cell discover-then-fit on per-value centroids:
 
 For each cell, compute the spread-aware Mahalanobis distance between every value-pair; Spearman correlation against the cyclic ground-truth distance. Tests whether the "geometry" is just a noise artefact at small per-class spread.
 
-### Stage 2c — Bayesian manifold via point-cloud GPLVM (current)
+### Stage 2c — BSMI-R: Bayesian Shape Manifold Inference with Refusal
+
+Reference: `docs/gplvm.md`. **Core principle — no module gates early; every module returns evidence; the final Tier A/B/C/D decision is made once after all evidence is collected.**
 
 For each eligible cell on the **Union(LDA-A, CCSVD)** subspace:
-1. Project all correct activations onto B_u (typically 4096 → 6–18 dims).
-2. Fit an exact GPLVM with strong-Wolfe LBFGS on the full per-cell point cloud.
-3. **Six kernels compete**:
 
-| # | Kernel | Hypothesis |
-|---|---|---|
-| K1 | RBF | smooth 1D curve |
-| K2 | Periodic | 1D circle |
-| K3 | Periodic + Linear | helix (d=2, linear on orthogonal axis) |
-| K4 | Torus | two periods, d=2 |
-| K5 | Concentric | two harmonics at same period, d=1 |
-| K6 | Periodic + RBF | circle + smooth non-linear axis, d=2 |
+1. **Stage 0 — per-label noise estimates.** Run on the **full point cloud** (all N correct activations). Estimate per-label noise σ²_v from within-cluster scatter. The N×n_basis design matrix Phi is built by indexing per-value basis rows.
 
-4. **Verdict gate** — winner must pass all three:
-   - BF gap ≥ 10 nats (K ≤ 10) / 5 nats (K ≥ 11)
-   - 3-seed log-likelihood agreement within 1 nat
-   - 5-fold hold-out MSE ≤ runner-up's MSE − 1 SE
+2. **Stages 1–2 — shape priors K_0..K_6:**
 
-5. **Significance** — 1000-perm column-shuffle null on the winner only; global BH-FDR across cells.
-6. **Dim-only fallback** — for cells failing the gate, report ARD `p(d ≥ k)` and bootstrap-PR `d̂` (1–5). Cells with `d̂ ≥ 1.5` or `P(d≥1) ≥ 0.95` get a `dim_only` verdict.
-7. **Confidence tier** — `HIGH` / `MEDIUM` / `LOW` / `DISCOVERY_ONLY` per plan §C.10.
+| # | Shape | Basis Phi(v; theta) | Latent dim | Expected Betti |
+|---|---|---|---|---|
+| K_0 | Generic (smooth, "none of the above") | polynomial in t = v/(K-1) | 1 | (None, None, None) |
+| K_1 | Line | [1, t] | 1 | (1, 0, 0) |
+| K_2 | Circle | [1, cos(2πv/P), sin(2πv/P)] | 2 | (1, 1, 0) |
+| K_3 | Open helix | [1, cos, sin, t] | 1 | (1, 0, 0) — neutral |
+| K_4 | Torus | [1, cos φ, sin φ, cos ψ, sin ψ] | 2 | (1, 2, 1) |
+| K_5 | Concentric | [1, r(v)cos, r(v)sin, r(v)] | 2 | neutral |
+| K_6 | Ribbon | [1, cos, sin, t, t·cos, t·sin] | 2 | neutral |
 
-**Configuration (locked 2026-05-17):**
-- `SUBSAMPLE_N_MAX = 10000` (full per-cell N)
-- `JITTER_INIT = 1e-4`, `JITTER_MAX = 1e-1`
-- LBFGS with **`line_search_fn="strong_wolfe"`** (root fix — composite kernels deterministically fail without this)
-- `parallel=True` on `fit_kernel_three_seeds` + `holdout_mse` → CUDA-stream parallelism on 3 seeds and 5 folds
-- BIC penalty includes latent dimension count
-- K3 d=2 with `half_normal(0.3)` outputscale prior on the linear arm
+3. **Stages 3–5 — Bayesian shape evidence on the full point cloud.** For each shape `K_k`, compute the closed-form Gaussian marginal likelihood log p(Y | theta, K_k) on all N points (Phi rows indexed by each point's label) under the conjugate prior `W ~ N(0, alpha I)`, then **multimodal Laplace integration over period(s)**:
+   log Z_k ≈ logsumexp_m [ log p(Y | theta_m, K_k) + curvature correction ] − log M.
+   Stage 2a's discovered period seeds the proposal modes {P, 2P, 3P, P/2}.
+
+4. **Stage 6 — refined evidence audit.** For the top-3 candidates plus K_0, importance-weighted refinement around the best theta produces log Z and SE.
+
+5. **Independent evidence modules (Stages 7–14, none gate early):**
+   - **Stage 7 — intrinsic dimension:** TwoNN + Levina-Bickel + PCA participation ratio, with bootstrap CIs.
+   - **Stage 8 — persistent homology (DEMOTED):** Betti numbers via ripser/gudhi; `β₁ = 0` is **neutral** for line/helix/ribbon, never a rejection.
+   - **Stage 9 — Fourier diagnostics:** proposes periods and two-axis flag; never decides the shape.
+   - **Stage 10 — posterior differential geometry:** curvature `κ`, torsion `τ`, and the K_3 helix drift test ‖d_⊥span(cos,sin)‖ > 0. **This is what distinguishes shapes that share topology.**
+   - **Stage 11 — label alignment:** Spearman or circular correlation between recovered latent and true label codes.
+   - **Stage 12 — holdout adequacy:** within-label + leave-value-out. Relaxed rule `mse_winner ≤ 1.10 × min(mse_others)`, not the prior over-strict "beat runner-up by 1 SE".
+   - **Stage 13 — seed and prior stability:** vary (seed × alpha-prior); reject if log-evidence std > 2 nats.
+   - **Stage 14 — 1000-permutation null** with right-tailed empirical p-value `p = (1 + #ge) / (B + 1)`.
+
+6. **Stage 15 — global BH-FDR (aggregator)** with Benjamini–Yekutieli sensitivity check.
+
+7. **Stage 17 — Tier decision** (made once, after all evidence collected):
+   - **Tier A — named shape:** evidence gap ≥ 5 nats (or 10 for small K), alignment ≥ 0.5, geom signature supports, holdout adequate, seeds stable, perm survives FDR, PH not contradictory.
+   - **Tier B — geometric family:** family-vs-K_0 gap ≥ 2 nats with alignment ≥ 0.3, but exact shape ambiguous.
+   - **Tier C — dimension only:** dim estimators agree, no named shape supported.
+   - **Tier D — refuse:** signals disagree.
+
+**Configuration:** `configs/stage2c.yaml`. All thresholds, FDR alpha, seeds, and prior ranges live there.
 
 ### Stages 3 and 4 (planned)
 
@@ -173,20 +188,25 @@ emnlp2026/
 ├── aggregate_stage2b_dsw.py             # Stage 2b aggregator
 ├── check_stage2b_toys.py                # Stage 2b toys
 │
-├── stage2c_gplvm.py                     # Stage 2c worker
-├── stage2c_kernels.py                   # 6-kernel zoo
-├── aggregate_stage2c.py                 # Stage 2c aggregator
-├── check_stage2c_toys.py                # Stage 2c toys
-├── configs/stage2c.yaml                 # toy-calibrated BF thresholds + ARD epsilon
+├── stage2c_gplvm.py                     # Stage 2c BSMI-R worker (Stages 0-17 orchestrator)
+├── stage2c_shapes.py                    # K_0..K_6 shape priors + family map
+├── stage2c_modules.py                   # independent evidence modules (dim, PH, Fourier, geom, align, holdout, perm)
+├── aggregate_stage2c.py                 # BH-FDR + BY-FDR aggregator
+├── configs/stage2c.yaml                 # BSMI-R thresholds, FDR alpha, period prior
 │
-├── sbatch/                              # all 18 SLURM scripts (organised 2026-05-17)
+├── causal_validation.py                 # Stage 4 — M1 ablation + M2 patching (subspace + geometry)
+├── aggregate_stage4_causal.py           # Stage 4 aggregator
+│
+├── sbatch/                              # all SLURM scripts
 │   ├── run_eval_and_extract.sbatch
 │   ├── run_ccsvd_subspaces.sbatch
 │   ├── run_step{6,7,8,9}.sbatch                 + per-step aggregators
 │   ├── run_stage2a.sbatch                       + run_stage2a_aggregate.sbatch
 │   ├── run_stage2b.sbatch                       + run_stage2b_aggregate.sbatch
-│   ├── run_stage2c_{gptj,llama,pythia}.sbatch   # per-model, partition-aware
-│   └── run_stage2c_aggregate.sbatch
+│   ├── run_stage2c_{gptj,llama,pythia}.sbatch   # per-model, partition-aware (4 stripes each)
+│   ├── run_stage2c_aggregate.sbatch
+│   ├── run_stage4_{gptj,llama,pythia}.sbatch    # 4 stripes each, A6000
+│   └── run_stage4_aggregate.sbatch
 │
 ├── docs/                                # one Markdown file per finished step
 │   ├── 01_tokenization_limits.md
@@ -197,7 +217,8 @@ emnlp2026/
 │   ├── 06_lda_subspaces.md
 │   ├── 07_audit_pipeline.md             # Steps 7/8/9 combined
 │   ├── 08_stage2a_fourier_helix.md
-│   └── 09_stage2b_dsw_spread_aware.md
+│   ├── 09_stage2b_dsw_spread_aware.md
+│   └── gplvm.md                          # Stage 2c BSMI-R spec
 │
 └── data/                                # symlink → /data/user_data/anshulk/emnlp2026
     ├── models/                          # 51 GB weights
@@ -215,7 +236,8 @@ emnlp2026/
         ├── jl_distance/                 # Step 9
         ├── stage2a_fourier_helix/       # Stage 2a
         ├── stage2b_dsw/                 # Stage 2b
-        ├── stage2c_gplvm/               # Stage 2c (currently empty — relaunching post-fix)
+        ├── stage2c_gplvm/               # Stage 2c BSMI-R per-cell artifacts
+        ├── stage4_causal/                # Stage 4 per-cell ablation + patching results
         └── figures/
 ```
 
@@ -264,38 +286,51 @@ J2B=$(sbatch --parsable sbatch/run_stage2b.sbatch)
 sbatch --dependency=afterok:$J2B sbatch/run_stage2b_aggregate.sbatch
 ```
 
-### Stage 2c (current — three per-model jobs + aggregator)
+### Stage 2c BSMI-R (three per-model jobs + aggregator)
 
 ```bash
-# Toy validation (CPU+GPU, ~3 min)
-python check_stage2c_toys.py --quick
-
-# Single-cell smoke (optional)
+# Single-cell smoke
 python stage2c_gplvm.py --config config.yaml \
-    --model gpt-j-6b --task multiplication --mode off --layer 14 --concept ans_units
+    --model gpt-j-6b --task addition --mode off --layer 14 --concept ans_tens
 
-# Production sweep — 3 per-model jobs + aggregator
-JID_GPT=$(sbatch --parsable sbatch/run_stage2c_gptj.sbatch)     # 8 tasks general/normal
-JID_LLA=$(sbatch --parsable sbatch/run_stage2c_llama.sbatch)    # 8 tasks preempt
-JID_PYT=$(sbatch --parsable sbatch/run_stage2c_pythia.sbatch)   # 8 tasks preempt
-sbatch --dependency=afterany:$JID_GPT:$JID_LLA:$JID_PYT \
+# Production sweep — 4 array tasks per model, A6000 each, 2-day wall
+JID_GPT=$(sbatch --parsable sbatch/run_stage2c_gptj.sbatch)    # general
+JID_PYT=$(sbatch --parsable sbatch/run_stage2c_pythia.sbatch)  # general
+JID_LLA=$(sbatch --parsable sbatch/run_stage2c_llama.sbatch)   # preempt
+sbatch --dependency=afterany:$JID_GPT:$JID_PYT:$JID_LLA \
        sbatch/run_stage2c_aggregate.sbatch
 ```
 
-**Per-cell time at production N (with strong_wolfe, parallel streams, 2-worker GPU packing):**
-- Addition cells (N≈8k): ~30–60 min/cell
-- Multiplication cells (N≈2.7k): ~5–10 min/cell
+**Per-cell time (point cloud + closed-form Bayesian linear evidence + 10,000-perm null):**
+- Addition cells (N≈8k, K≈10): ~2-3 min. Heavyweights (K≈100-200): up to ~10 min.
+- Multiplication cells (N≈2.7k): ~1 min on average.
 
-**Expected wall time:** GPT-J ~24–48 h on 8 general GPUs; Llama/Pythia in parallel on preempt. Aggregator ~5 min once all three finish.
+The N × n_basis Phi matrix scales linearly in N with n_basis ≤ 6, so single evidence calls stay in the millisecond range; the perm-test loop dominates. Expected total wall on 4 GPUs per model: ~6 h.
+
+### Stage 4 causal (three per-model jobs + aggregator)
+
+```bash
+# Single-cell, all layers (model loads once)
+python causal_validation.py --config config.yaml \
+    --model gpt-j-6b --task addition --mode off --layer all --concept b_tens
+
+# Sweep — depends on BSMI-R artifacts already on disk; resume-friendly
+JID_G=$(sbatch --parsable sbatch/run_stage4_gptj.sbatch)
+JID_P=$(sbatch --parsable sbatch/run_stage4_pythia.sbatch)
+JID_L=$(sbatch --parsable sbatch/run_stage4_llama.sbatch)
+sbatch --dependency=afterany:$JID_G:$JID_P:$JID_L \
+       sbatch/run_stage4_aggregate.sbatch
+```
+
+Stage 4 auto-skips cells without a BSMI-R-declared shape (Tier C dim_only, Tier D refuse, low_K). Per-cell cost is ~7-15 s on a warm-loaded model.
 
 ### Standing rules
 
-- Every fit uses the full per-cell correct population. 5-fold CV and 1000-permutation nulls are *resampling*, not subsampling.
+- Every fit uses the full per-cell correct population. K-fold CV, LOO CV, and 10,000-permutation nulls are *resampling*, not subsampling.
 - No silent truncation, no random row sampling, no subsetting of N for any metric.
 - Atomic writes (tempfile + `os.replace`) and resume-by-metadata on every per-cell job.
 - Spearman ρ AND Pearson r reported side-by-side for every correlation measurement.
-- Permutation / random-baseline trials: 1000 everywhere.
-- BIC parsimony penalty in Stage 2c counts hyperparameters **plus** latent dimensions, so kernels with d=2 are penalised vs d=1.
+- Permutation / random-baseline trials: 10,000 in BSMI-R, 5 random-subspace controls in Stage 4.
 
 ---
 
@@ -303,23 +338,22 @@ sbatch --dependency=afterany:$JID_GPT:$JID_LLA:$JID_PYT \
 
 Every step writes a manifest (sha256 of inputs and outputs, library versions, config sha, total runtime). Every per-cell job writes a `metadata.json` with `computation_status: "complete"` so reruns are idempotent.
 
-### Stage 2c per-cell artifacts
+### Stage 2c BSMI-R per-cell artifacts
 Under `data/results/stage2c_gplvm/{model}/{task}/mode_{mode}/layer_{LL}/{concept}/`:
-- `gplvm_results.csv` (single summary row: winner_kernel, BF gap, p_2c, q_2c, verdict, tier, per-kernel adj_ml)
-- `elbo_per_kernel_seed.npy` (6 × 3 matrix)
-- `mu_stack.npy`, `noise_scalar.npy`, `Lambda_full.npy` (centroid summaries)
-- `perm_null.npy` (1000-perm BIC-adjusted log-lik distribution)
-- `bootstrap_d_hat.npy` (200-draw participation ratio)
-- `kernel_hyperparams.json` (final periods, lengthscales, noise per winning seed)
-- `ard_posterior.json` (per-axis active probabilities + bootstrap d̂)
-- `union_basis_meta.json` (LDA + CCSVD contributions + SVD info)
-- `metadata.json`
+- `gplvm_results.csv` — single summary row: `best_shape`, `tier`, `evidence_gap`, `evidence_gap_se`, `logZ_best`, `logZ_runnerup`, `logZ_K0`, `dim_hat` + CI, `PH_status`, `Betti`, `Fourier_period`, `geom_status`, `alignment_score`, `holdout_mse`, `holdout_mse_lvo`, `seed_stable`, `perm_p`, `verdict_pre_fdr`, `verdict_post_fdr`. Backwards-compat columns `winner_kernel`, `P_top1`, `P_top2` are kept for `causal_validation.py`.
+- `evidence_per_shape.csv` — one row per K_k with `log_E`, `log_E_refined`, `log_E_se`, `alignment_score`, `geom_status`, `mse_holdout`, `mse_lvo`, `n_basis`, `best_theta`.
+- `perm_null.npy` — 1000 permutation null statistics.
+- `latent_winner.npy`, `W_winner.npy` — the winner shape's recovered latent (K_present × d_embed) and basis weights, ready for `causal_validation.py` to read directly without refitting.
+- `metadata.json` — full evidence vector (Stage 16): dim module, PH module, Fourier module, per-shape geometry / alignment / holdout / seed_stability, permutation summary, union basis meta.
 
 Aggregator outputs under `data/results/stage2c_gplvm/comparison/`:
-- `gplvm_all.csv`, `verdict_counts_by_cell.csv`, `cross_mode_kernel_survival.csv`
-- `kernel_concept_matrix.csv`, `dim_only_table.csv`
-- `stage2a_2b_2c_survival.csv` (joins all three stages), `headline_tier_cells.csv`
-- `manifest.json`
+- `bsmir_all.csv` — every cell, every column, with `q_BH` (BH-FDR) and `q_BY` (Benjamini-Yekutieli sensitivity) and post-FDR verdict.
+- `verdict_counts_by_tier.csv` — per (model, task, mode, layer) tier histogram.
+- `shape_winner_matrix.csv` — wide-form named-shape winners across modes.
+- `dim_only_cells.csv` — Tier-C cells with dim + CI + Betti.
+- `refusals.csv` — Tier-D cells with refusal reason.
+- `cross_mode_shape_survival.csv` — per-cell shape consistency across modes.
+- `aggregator_meta.json` — manifest (counts, alpha, generation time).
 
 ---
 

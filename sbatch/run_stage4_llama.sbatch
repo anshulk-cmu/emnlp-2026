@@ -1,15 +1,12 @@
 #!/bin/bash
 # =============================================================================
-# Stage 2c BSMI-R — Llama 3.1 8B on the preempt partition.
-#
-# Pipeline: Bayesian Shape Manifold Inference with Refusal. See docs/gplvm.md
-# and the header of run_stage2c_gptj.sbatch. Resume-by-computation_status
-# makes preempt restarts free.
+# Stage 4 causal — Llama 3.1 8B, preempt partition, 4 array tasks, A6000 each.
+# Resume-by-stage4_results.json makes preempt restarts cheap.
 # =============================================================================
 
-#SBATCH --job-name=emnlp_stage2c_llama
-#SBATCH --output=/data/user_data/anshulk/emnlp2026/logs/slurm-stage2c-llama-%A_%a.out
-#SBATCH --error=/data/user_data/anshulk/emnlp2026/logs/slurm-stage2c-llama-%A_%a.err
+#SBATCH --job-name=emnlp_stage4_llama
+#SBATCH --output=/data/user_data/anshulk/emnlp2026/logs/slurm-stage4-llama-%A_%a.out
+#SBATCH --error=/data/user_data/anshulk/emnlp2026/logs/slurm-stage4-llama-%A_%a.err
 #SBATCH --partition=preempt
 #SBATCH --qos=preempt_qos
 #SBATCH --gres=gpu:A6000:1
@@ -22,7 +19,6 @@
 #SBATCH --mail-user=anshulk@andrew.cmu.edu
 
 set -euo pipefail
-
 ARRAY_SIZE=4
 ARRAY_IDX=$SLURM_ARRAY_TASK_ID
 CONFIG=/home/anshulk/emnlp2026/config.yaml
@@ -36,15 +32,13 @@ conda activate geometry
 cd /home/anshulk/emnlp2026
 
 PYTHON=/data/user_data/anshulk/miniconda3/envs/geometry/bin/python
-echo "[$(date)] PYTHON=$PYTHON"
 $PYTHON --version
-$PYTHON -c "import numpy, pandas, sklearn; print(f'numpy={numpy.__version__} pandas={pandas.__version__} sklearn={sklearn.__version__}')"
-$PYTHON -c "import ripser; print(f'ripser={ripser.__version__}')" 2>&1 | head -1 || \
-  echo "[warn] ripser not installed; PH module will fall back to gudhi or report status=no_ph_lib"
+$PYTHON -c "import torch, transformers; print(f'torch={torch.__version__} transformers={transformers.__version__}')"
 
-$PYTHON stage2c_gplvm.py \
+$PYTHON causal_validation.py \
     --config "$CONFIG" \
     --model "$MODEL" \
+    --mode all \
     --sweep all \
     --array-task "$ARRAY_IDX" \
     --array-size "$ARRAY_SIZE"
