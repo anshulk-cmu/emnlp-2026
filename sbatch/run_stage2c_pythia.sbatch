@@ -40,6 +40,7 @@ $PYTHON -c "import ripser; print(f'ripser={ripser.__version__}')" 2>&1 | head -1
 $PYTHON stage2c_gplvm.py \
     --config "$CONFIG" \
     --model "$MODEL" \
+    --mode all \
     --sweep all \
     --array-task "$ARRAY_IDX" \
     --array-size "$ARRAY_SIZE"

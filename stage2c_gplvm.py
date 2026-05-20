@@ -742,8 +742,171 @@ def compute_family_evidences(log_E_per_shape: Dict[str, float]) -> Dict:
 
 
 # ============================================================================
-# Stage 14 — 1000-permutation test
+# Stage 14 — 1000-permutation test (CPU reference + GPU-batched)
 # ============================================================================
+
+def _perm_first_theta(shape, v_codes, K_natural,
+                       P_hat: Optional[float], P_hat_2: Optional[float]
+                       ) -> Optional[Dict]:
+    """The single theta proposal used by `multimodal_laplace_evidence(...n_alias=1)`."""
+    proposals = shape.propose_thetas(v_codes, K_natural, P_hat=P_hat,
+                                       P_hat_2=P_hat_2, n_alias=1)
+    if not proposals:
+        return None
+    return proposals[0]
+
+
+def permutation_test_for_cell_gpu(Z_full, label_codes, sigma2_v, K_natural,
+                                    shapes_to_test, P_hat, P_hat_2,
+                                    observed_T: float,
+                                    alignment_lambda: float = 1000.0,
+                                    B: int = N_PERMUTATIONS,
+                                    rng_seed: int = 0,
+                                    alpha_prior: float = 1.0,
+                                    chunk_size: int = 2000,
+                                    device: Optional[str] = None) -> Dict:
+    """GPU-batched permutation test, mathematically identical to
+    `permutation_test_for_cell` (same RNG → same permutations → same
+    null statistic up to float-precision roundoff).
+
+    Strategy: for each shape's single n_alias=1 theta, build Phi_per_value once,
+    then evaluate B permutations in chunks on GPU using batched Cholesky.
+    """
+    import torch
+
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    torch_device = torch.device(device)
+    dtype = torch.float64   # use fp64 to match CPU numerics closely
+
+    rng = np.random.default_rng(rng_seed)
+    K_present = int(sigma2_v.shape[0])
+    N, r = Z_full.shape
+    v_codes_true = np.arange(K_present, dtype=np.int64)
+
+    # Generate ALL permutations on CPU (same RNG sequence as CPU path).
+    pi_batch = np.empty((B, K_present), dtype=np.int64)
+    for b in range(B):
+        pi_batch[b] = rng.permutation(K_present)
+
+    # Per-shape: single-theta basis + latent + col-factors.
+    K0_shape = shapes_mod.SHAPE_REGISTRY["K0_Generic"]
+    K0_theta = _perm_first_theta(K0_shape, v_codes_true, K_present,
+                                    P_hat, P_hat_2) or {}
+    K0_Phi_pv = K0_shape.build_basis(K0_theta, v_codes_true, K_present)
+    K0_col = K0_shape.column_alpha_factors(K0_theta, K_present)
+
+    named_specs = []
+    for sh in shapes_to_test:
+        if sh.name == "K0_Generic":
+            continue
+        theta = _perm_first_theta(sh, v_codes_true, K_present, P_hat, P_hat_2)
+        if theta is None:
+            continue
+        Phi_pv  = sh.build_basis(theta, v_codes_true, K_present)
+        latent  = sh.latent_from_basis(theta, v_codes_true, K_present)
+        col_fac = sh.column_alpha_factors(theta, K_present)
+        named_specs.append({"shape": sh, "name": sh.name,
+                              "theta": dict(theta), "Phi_pv": Phi_pv,
+                              "latent": latent, "col_factors": col_fac,
+                              "n_basis": int(Phi_pv.shape[1])})
+    if not named_specs:
+        return {"p_value": float("nan"),
+                "null_samples": [],
+                "n_permutations_run": 0,
+                "observed_T": float(observed_T),
+                "alignment_lambda": float(alignment_lambda)}
+
+    # Push fixed tensors to GPU once.
+    Z_t           = torch.tensor(Z_full,      dtype=dtype, device=torch_device)
+    sigma2_t      = torch.tensor(sigma2_v,    dtype=dtype, device=torch_device)
+    label_codes_t = torch.tensor(label_codes, dtype=torch.long, device=torch_device)
+    pi_batch_t    = torch.tensor(pi_batch,    dtype=torch.long, device=torch_device)
+    Z_norm2_t     = (Z_t ** 2).sum(dim=-1)                       # (N,)
+    twopi_log     = math.log(2.0 * math.pi)
+
+    def _batched_log_marg(shape_name: str, Phi_pv_np: np.ndarray,
+                            col_fac_np: np.ndarray, n_basis: int
+                            ) -> np.ndarray:
+        Phi_pv_t = torch.tensor(Phi_pv_np, dtype=dtype, device=torch_device)
+        col_t    = torch.tensor(col_fac_np, dtype=dtype, device=torch_device)
+        prior_var_t  = torch.clamp(alpha_prior * col_t, min=1e-12)         # (n_basis,)
+        prior_prec_t = 1.0 / prior_var_t
+        log_prior_var_sum = torch.log(prior_var_t).sum()
+        eye = torch.eye(n_basis, dtype=dtype, device=torch_device)
+
+        out = np.empty(B, dtype=np.float64)
+        for b0 in range(0, B, chunk_size):
+            b1 = min(b0 + chunk_size, B); cb = b1 - b0
+            pi_chunk = pi_batch_t[b0:b1]                          # (cb, K)
+            lc_perm  = pi_chunk[:, label_codes_t]                  # (cb, N)
+            Phi_perm = Phi_pv_t[lc_perm]                           # (cb, N, n_basis)
+            sigma_p  = sigma2_t[lc_perm]
+            prec     = 1.0 / torch.clamp(sigma_p, min=1e-12)       # (cb, N)
+            M        = Phi_perm * prec.unsqueeze(-1)               # (cb, N, n_basis)
+            PtP = torch.einsum('bnk,bnj->bkj', M, Phi_perm)        # (cb, n_basis, n_basis)
+            PtY = torch.einsum('bnk,nr->bkr',  M, Z_t)             # (cb, n_basis, r)
+            A   = PtP + torch.diag(prior_prec_t)                   # broadcasts to (cb, nb, nb)
+            try:
+                L = torch.linalg.cholesky(A + 1e-9 * eye)
+            except RuntimeError:
+                L = torch.linalg.cholesky(A + 1e-3 * eye)
+            W = torch.cholesky_solve(PtY, L)                        # (cb, n_basis, r)
+            log_det_A = 2.0 * torch.log(
+                torch.diagonal(L, dim1=-2, dim2=-1)).sum(dim=-1)    # (cb,)
+            Y_w_norm2 = torch.einsum('bn,n->b', prec, Z_norm2_t)    # (cb,)
+            # ||resid||^2 = ||Y_w||^2 - 2 W^T PtY + W^T PtP W      (Bayesian, NOT OLS)
+            WtPtY     = (W * PtY).sum(dim=(-1, -2))                 # (cb,)
+            PtP_W     = torch.bmm(PtP, W)                            # (cb, n_basis, r)
+            WtPtP_W   = (W * PtP_W).sum(dim=(-1, -2))                # (cb,)
+            resid     = Y_w_norm2 - 2.0 * WtPtY + WtPtP_W            # (cb,)
+            log_prec_sum = torch.log(prec).sum(dim=-1)              # (cb,)
+            # Mirrors CPU log_marg_lik = per_output.sum() with r outputs:
+            #   r * const  +  0.5 r (-log_prior_var_sum - log_det_A) - 0.5 * total_resid_sumsq
+            const = -0.5 * N * twopi_log + 0.5 * log_prec_sum
+            log_marg = (r * const
+                         + 0.5 * r * (-log_prior_var_sum - log_det_A)
+                         - 0.5 * resid)
+            out[b0:b1] = log_marg.detach().cpu().numpy()
+        return out
+
+    # Evaluate K0 + all named shapes on GPU.
+    log_E_K0_all    = _batched_log_marg("K0_Generic",
+                                          K0_Phi_pv, K0_col,
+                                          int(K0_Phi_pv.shape[1]))
+    log_E_named_all = np.full((B, len(named_specs)), float("-inf"),
+                                 dtype=np.float64)
+    for s_idx, spec in enumerate(named_specs):
+        log_E_named_all[:, s_idx] = _batched_log_marg(
+            spec["name"], spec["Phi_pv"], spec["col_factors"], spec["n_basis"])
+
+    # Per-perm: pick winner, compute alignment on CPU (cheap, K-length).
+    null = np.empty(B, dtype=np.float64)
+    for b in range(B):
+        row = log_E_named_all[b]
+        if not np.any(np.isfinite(row)):
+            null[b] = float("nan"); continue
+        best_idx = int(np.argmax(row))
+        spec     = named_specs[best_idx]
+        latent_remapped = spec["latent"][pi_batch[b]]
+        align = evidence_mod.label_alignment(
+            spec["shape"], spec["theta"], latent_remapped, v_codes_true,
+            K_natural=K_present)
+        a = float(abs(align.get("alignment_score", 0.0)))
+        null[b] = (row[best_idx] - log_E_K0_all[b]) + alignment_lambda * a
+
+    finite = null[np.isfinite(null)]
+    if finite.size == 0:
+        p = float("nan")
+    else:
+        p = (1 + int((finite >= observed_T).sum())) / (finite.size + 1)
+    return {"p_value": float(p),
+             "null_samples": null.tolist(),
+             "n_permutations_run": int(B),
+             "observed_T": float(observed_T),
+             "alignment_lambda": float(alignment_lambda),
+             "device_used": str(torch_device)}
+
 
 def permutation_test_for_cell(Z_full, label_codes, sigma2_v, K_natural,
                                 shapes_to_test, P_hat, P_hat_2,
@@ -751,7 +914,8 @@ def permutation_test_for_cell(Z_full, label_codes, sigma2_v, K_natural,
                                 alignment_lambda: float = 1000.0,
                                 B: int = N_PERMUTATIONS,
                                 rng_seed: int = 0,
-                                alpha_prior: float = 1.0) -> Dict:
+                                alpha_prior: float = 1.0,
+                                use_gpu: bool = True) -> Dict:
     """Tweak 2 — permutation null with strengthened statistic, on full points.
 
     For each permutation b:
@@ -765,7 +929,21 @@ def permutation_test_for_cell(Z_full, label_codes, sigma2_v, K_natural,
     Under H_alt: alignment stays at ~0.99; under H_null: alignment crashes
     to ~0 because labels are scrambled. λ scales alignment up to the same
     magnitude as the evidence gap.
+
+    If `use_gpu=True` and torch+CUDA are available, dispatches to the GPU-
+    batched implementation (identical math, ~30-80x faster on large K).
     """
+    if use_gpu:
+        try:
+            import torch  # noqa: F401
+            if torch.cuda.is_available():
+                return permutation_test_for_cell_gpu(
+                    Z_full, label_codes, sigma2_v, K_natural,
+                    shapes_to_test, P_hat, P_hat_2, observed_T,
+                    alignment_lambda=alignment_lambda, B=B,
+                    rng_seed=rng_seed, alpha_prior=alpha_prior)
+        except Exception:
+            pass  # fall through to CPU
     rng = np.random.default_rng(rng_seed)
     null = []
     K_shape = shapes_mod.SHAPE_REGISTRY["K0_Generic"]
@@ -1048,9 +1226,18 @@ def analyze_cell(Z: np.ndarray, label_codes: np.ndarray, K_natural: int,
                   union_meta: dict, mu_layer_source: str,
                   stage2a_row_lda: Optional[dict],
                   stage2a_row_ccsvd: Optional[dict],
-                  bsmir_cfg: dict, logger: logging.Logger
+                  bsmir_cfg: dict, logger: logging.Logger,
+                  alpha_override: Optional[float] = None,
+                  P_hat_override: Optional[float] = None,
+                  P_hat_2_override: Optional[float] = None,
                   ) -> Dict:
-    """Run BSMI-R Stages 0-17 on one cell."""
+    """Run BSMI-R Stages 0-17 on one cell.
+
+    Overrides (used by Stage 3 ownership tests):
+        alpha_override   — skip empirical-Bayes; use this alpha for every shape.
+        P_hat_override   — skip Stage 9 Fourier; use this as P_hat seed.
+        P_hat_2_override — skip Stage 9 second-axis; use this as P_hat_2 seed.
+    """
     cell_id = f"{model}|{task}|{mode}|{layer:02d}|{concept}"
     K_present = int(label_codes.max() + 1) if label_codes.size > 0 else 0
     if K_present < MIN_K_FOR_BSMIR:
@@ -1097,35 +1284,52 @@ def analyze_cell(Z: np.ndarray, label_codes: np.ndarray, K_natural: int,
     logger.info("[%s] Stage 8: persistent homology", cell_id)
     cr.ph = evidence_mod.persistent_homology(Z_bar_k, max_dim=2)
 
-    # Stage 9 — Fourier diagnostics
+    # Stage 9 — Fourier diagnostics (always run for the evidence vector, even
+    # when periods are overridden, so the diagnostic record stays complete).
     logger.info("[%s] Stage 9: fourier diagnostics", cell_id)
     cr.fourier = evidence_mod.fourier_diagnostics(Z_bar_k, v_codes_k, K_natural)
     P_hat = None
     P_hat_2 = None
-    # Prefer Stage 2a period when available; else use Stage 9 Fourier estimate.
-    s2a_P = stage2a_period(stage2a_row_lda) or stage2a_period(stage2a_row_ccsvd)
-    if s2a_P is not None:
-        P_hat = float(s2a_P)
+    if P_hat_override is not None:
+        P_hat = float(P_hat_override)
     else:
-        ph_P = cr.fourier.get("P_hat")
-        if ph_P and np.isfinite(ph_P):
-            P_hat = float(ph_P)
-    if cr.fourier.get("P_hat_2") and np.isfinite(cr.fourier["P_hat_2"]):
+        # Prefer Stage 2a period; else Stage 9 Fourier estimate.
+        s2a_P = stage2a_period(stage2a_row_lda) or stage2a_period(
+            stage2a_row_ccsvd)
+        if s2a_P is not None:
+            P_hat = float(s2a_P)
+        else:
+            ph_P = cr.fourier.get("P_hat")
+            if ph_P and np.isfinite(ph_P):
+                P_hat = float(ph_P)
+    if P_hat_2_override is not None:
+        P_hat_2 = float(P_hat_2_override)
+    elif cr.fourier.get("P_hat_2") and np.isfinite(cr.fourier["P_hat_2"]):
         P_hat_2 = float(cr.fourier["P_hat_2"])
 
     # Fix 1 — Empirical Bayes alpha (single value per cell, shared across
-    # all shapes for a fair comparison).
-    logger.info("[%s] Stage 3pre: empirical-Bayes alpha", cell_id)
-    eb = empirical_bayes_alpha(
-        Z_full_k, label_codes_k, sigma2_v_k,
-        list(shapes_mod.all_shapes()),
-        K_natural=keep.size, P_hat=P_hat, P_hat_2=P_hat_2)
-    alpha_hat = float(eb["alpha_hat"])
-    cr.alpha_hat = alpha_hat
-    cr.alpha_eb_details = eb
-    logger.info("[%s]   alpha_hat = %.3f (log_marg over alpha: %s)",
-                  cell_id, alpha_hat,
-                  {k: round(v, 1) for k, v in eb["log_marg_per_alpha"].items()})
+    # all shapes for a fair comparison). Stage 3 ownership locks alpha to the
+    # raw cell's value via alpha_override so log Z values are apples-to-apples.
+    if alpha_override is not None:
+        alpha_hat = float(alpha_override)
+        cr.alpha_hat = alpha_hat
+        cr.alpha_eb_details = {"alpha_hat": alpha_hat,
+                                 "alpha_locked_by_caller": True}
+        logger.info("[%s] Stage 3pre: alpha locked to %.3f (caller override)",
+                      cell_id, alpha_hat)
+    else:
+        logger.info("[%s] Stage 3pre: empirical-Bayes alpha", cell_id)
+        eb = empirical_bayes_alpha(
+            Z_full_k, label_codes_k, sigma2_v_k,
+            list(shapes_mod.all_shapes()),
+            K_natural=keep.size, P_hat=P_hat, P_hat_2=P_hat_2)
+        alpha_hat = float(eb["alpha_hat"])
+        cr.alpha_hat = alpha_hat
+        cr.alpha_eb_details = eb
+        logger.info("[%s]   alpha_hat = %.3f (log_marg over alpha: %s)",
+                      cell_id, alpha_hat,
+                      {k: round(v, 1) for k, v in
+                          eb["log_marg_per_alpha"].items()})
 
     # Stage 3-5 — Bayesian shape evidence with multimodal Laplace period
     # integration, for every shape K_0..K_6, using empirical-Bayes alpha.
@@ -1655,8 +1859,9 @@ def main_full_sweep(args, cfg, paths, bsmir_cfg) -> int:
     mode_tag = args.mode if args.mode != "all" else "all"
     logger = setup_logging(paths["logs_root"], model_tag, task_tag, mode_tag)
     logger.info("=== BSMI-R full sweep: model=%s task=%s mode=%s "
-                  "array_task=%d / %d ===", model_tag, task_tag, mode_tag,
-                  array_idx, array_size)
+                  "array_task=%d / %d  rebalance=%s ===", model_tag, task_tag,
+                  mode_tag, array_idx, array_size,
+                  bool(args.rebalance_incomplete))
     all_models = [m["key"] for m in cfg["models"]]
     models = [args.model] if args.model else all_models
     all_tasks = ["addition", "multiplication"]
@@ -1664,6 +1869,43 @@ def main_full_sweep(args, cfg, paths, bsmir_cfg) -> int:
     all_modes = ["off", "answer", "norm"]
     modes = [args.mode] if args.mode and args.mode != "all" else all_modes
     n_done = n_skip = n_err = 0
+
+    # Rebalance: pre-build the set of incomplete cell_ids assigned to this
+    # stripe by INDEX in the sorted incomplete-cell list. This redistributes
+    # remaining work evenly when resuming a partial sweep on fewer stripes
+    # than the original launch.
+    my_cells: Optional[set] = None
+    if args.rebalance_incomplete:
+        all_incomplete: List[str] = []
+        for model in models:
+            mcfg = next(m for m in cfg["models"] if m["key"] == model)
+            for task in tasks:
+                if not (paths["data_root"] / "answers" / model
+                          / f"{task}_answers.csv").exists():
+                    continue
+                for mode in modes:
+                    sl_p = stage2a_summary_path(paths["results_root"], model,
+                                                  task, mode, "lda_a")
+                    sc_p = stage2a_summary_path(paths["results_root"], model,
+                                                  task, mode, "ccsvd")
+                    sl_df = pd.read_csv(sl_p) if sl_p.exists() else None
+                    sc_df = pd.read_csv(sc_p) if sc_p.exists() else None
+                    for layer in mcfg["layers"]:
+                        for concept in discover_concepts_for_cell(
+                                paths["results_root"], model, task, mode, layer,
+                                sl_df, sc_df):
+                            out_dir = stage2c_cell_dir(paths["results_root"],
+                                                         model, task, mode,
+                                                         layer, concept)
+                            if cell_complete(out_dir) and not args.force:
+                                continue
+                            cid = f"{model}|{task}|{mode}|{layer:02d}|{concept}"
+                            all_incomplete.append(cid)
+        all_incomplete.sort()
+        my_cells = {cid for i, cid in enumerate(all_incomplete)
+                     if i % array_size == array_idx}
+        logger.info("Rebalance: %d incomplete cells total; this stripe owns %d",
+                      len(all_incomplete), len(my_cells))
     for model in models:
         model_cfg = next(m for m in cfg["models"] if m["key"] == model)
         layers_for_model = model_cfg["layers"]
@@ -1699,11 +1941,15 @@ def main_full_sweep(args, cfg, paths, bsmir_cfg) -> int:
                         s2a_lda_df, s2a_ccsvd_df)
                     for concept in concepts:
                         cell_id = f"{model}|{task}|{mode}|{layer:02d}|{concept}"
-                        stripe = int.from_bytes(
-                            hashlib.sha256(cell_id.encode()).digest()[:4],
-                            "big") % array_size
-                        if stripe != array_idx:
-                            continue
+                        if my_cells is not None:
+                            if cell_id not in my_cells:
+                                continue
+                        else:
+                            stripe = int.from_bytes(
+                                hashlib.sha256(cell_id.encode()).digest()[:4],
+                                "big") % array_size
+                            if stripe != array_idx:
+                                continue
                         out_dir = stage2c_cell_dir(paths["results_root"],
                                                      model, task, mode, layer,
                                                      concept)
@@ -1776,6 +2022,12 @@ def build_argparser() -> argparse.ArgumentParser:
                     help="'all' = iterate all eligible cells")
     p.add_argument("--array-task", type=int, default=0)
     p.add_argument("--array-size", type=int, default=1)
+    p.add_argument("--rebalance-incomplete", action="store_true",
+                    help="Assign INCOMPLETE cells to stripes by sorted-index "
+                         "mod array_size instead of hash. Use this when "
+                         "resuming a partial sweep on fewer stripes than "
+                         "the original so the remaining work distributes "
+                         "evenly.")
     return p
 
 

@@ -239,8 +239,19 @@ def setup_cell(model: str, task: str, mode: str, layer: int, concept: str,
 
     mu_layer = X.mean(axis=0)
 
-    # Geometry-level subspace from BSMI-R: broadcast per-label latent to per-point.
-    lat = bsmir["latent_winner"]              # (K_present, d_geom)
+    # Geometry-level subspace from BSMI-R: use the FULL row-space of W_winner,
+    # not the lower-dim latent parameterisation. BSMI-R fits a Gaussian-linear
+    # regression  Z[v] = Phi(v) @ W  with W shape (n_basis, k_u). The shape
+    # subspace BSMI-R actually models in probe coordinates is span(W rows) =
+    # up to n_basis dims. Push it back to ambient via B_u and orthonormalise.
+    #
+    # Previous (broken) path used the d_latent-dim latent parameterisation
+    # (e.g. 3 dims for K6_Ribbon's (cos, sin, t)) and lstsq'd through B_u —
+    # that captures only a ~3-D slice of the full ~6-D shape regression,
+    # leaving ~78% of the between-class scatter inside B_u untouched and
+    # giving spuriously small Δacc on geometry ablation.
+    lat = bsmir["latent_winner"]              # (K_present, d_latent) — kept for downstream patching
+    W_winner = bsmir["W_winner"]              # (n_basis, k_u)
     K_present_bsmir = lat.shape[0]
     # codes may include values that BSMI-R filtered out via MIN_GROUP_SIZE.
     # Clamp to valid range and drop unrepresented points.
@@ -249,22 +260,21 @@ def setup_cell(model: str, task: str, mode: str, layer: int, concept: str,
         X = X[valid]
         codes = codes[valid]
         correct_probs = correct_probs.iloc[valid].reset_index(drop=True)
-    z_latent = lat[codes].astype(np.float64)   # (N, d_geom)
+    z_latent = lat[codes].astype(np.float64)   # (N, d_latent) — still saved on Cell for M2 patching
 
-    # Map z_latent (N, d) -> ambient (4096, d) via OLS through B_u, then orthonormalise.
-    Z_proj = (X - mu_layer) @ B_u.astype(np.float64)         # (N, k_u)
-    W_back, *_ = np.linalg.lstsq(Z_proj, z_latent, rcond=None)
-    B_geom_amb = (B_u.astype(np.float64) @ W_back).astype(np.float32)
-    d_geom = z_latent.shape[1]
-    if d_geom == 1:
+    B_geom_amb = (B_u.astype(np.float64)
+                   @ W_winner.T.astype(np.float64)).astype(np.float32)  # (4096, n_basis)
+    if B_geom_amb.shape[1] == 1:
         v = B_geom_amb.reshape(-1)
         Q_geom = (v / (np.linalg.norm(v) + 1e-12)).reshape(-1, 1).astype(np.float32)
     else:
         Q_geom, _ = np.linalg.qr(B_geom_amb)
         Q_geom = Q_geom.astype(np.float32)
+    d_geom = int(Q_geom.shape[1])
 
-    logger.info("  Geometry for %s: %s (family=%s, d_geom=%d)",
-                  concept, bsmir["winner_shape"], bsmir["winner_family"], d_geom)
+    logger.info("  Geometry for %s: %s (family=%s, n_basis=d_geom=%d, d_latent=%d)",
+                  concept, bsmir["winner_shape"], bsmir["winner_family"],
+                  d_geom, int(z_latent.shape[1]))
     return Cell(
         model=model, task=task, mode=mode, layer=layer, concept=concept,
         X=X.astype(np.float32), codes=codes,

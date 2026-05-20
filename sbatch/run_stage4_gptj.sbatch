@@ -9,7 +9,7 @@
 #SBATCH --output=/data/user_data/anshulk/emnlp2026/logs/slurm-stage4-gptj-%A_%a.out
 #SBATCH --error=/data/user_data/anshulk/emnlp2026/logs/slurm-stage4-gptj-%A_%a.err
 #SBATCH --partition=general
-#SBATCH --gres=gpu:A6000:1
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=2-00:00:00

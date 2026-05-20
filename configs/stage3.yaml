@@ -1,0 +1,102 @@
+# Stage 3 — Ownership test (pre-registered correlate sets).
+#
+# For each concept c, lists the algebraic-predecessor concepts whose
+# Union(LDA-A, CCSVD) bases must be orthogonalised out before re-running
+# BSMI-R. The Q basis is built as QR( stack( [B_u(c') for c' in C(c)] ) ).
+#
+# This file is the pre-registration. It must NOT be modified after the
+# first real-data Stage 3 run on a given (model, task) pair.
+
+# ─── Verdict rule — BINARY (post-2026-05-19 simplification) ─────────────────
+#
+# Verdict is determined solely by the sign of
+#     Δgap_vs_K0 = (raw_winner_logZ − raw_K0_logZ)
+#                   − (orth_winner_logZ − orth_K0_logZ)
+#
+#   Δgap_vs_K0 < 0  → OWNED       (residual signal survives orthogonalisation)
+#   Δgap_vs_K0 ≥ 0  → INHERITED   (geometry borrowed from algebraic correlates)
+#
+# Empirically (GPT-J n=420) the distribution of Δgap_vs_K0 is sharply bimodal;
+# no cell falls in |Δgap| ∈ (0, 5), so sign rule == any Kass-Raftery threshold.
+# Alignment retention, family match/flip, perm survival, var_removed_frac are
+# all recorded for paper analysis but do not enter the verdict.
+verdict_rule: "sign(delta_gap_vs_K0)"
+
+# ─── Stage 3 IO + bookkeeping ────────────────────────────────────────────────
+io:
+  cell_dir_name: stage3_ownership   # results_root/stage3_ownership/...
+  lock_alpha_from_stage2c: true     # use raw cell's alpha_hat so log Z is comparable
+  lock_period_from_stage2c: true    # same P_hat seed
+  n_permutations: 10000
+
+# ─── Per-task correlate sets (pre-registered) ────────────────────────────────
+# Each entry: concept -> list of correlate concept names. Empty list means
+# Stage 3 will report `verdict=trivial_no_correlates` and skip the cell.
+addition:
+  # Input concepts: no algebraic predecessor, but still test against the
+  # complementary input (so the geometry shouldn't be borrowed from the
+  # other operand alone).
+  a:           [a_units, a_tens]
+  b:           [b_units, b_tens]
+  a_units:     [a]
+  a_tens:      [a]
+  b_units:     [b]
+  b_tens:      [b]
+  # Direct sums
+  answer:      [a, b]
+  # Digit-level answer pieces
+  ans_units:        [a, b, a_units, b_units, column_sum_units, carry_units]
+  ans_tens:         [a, b, a_tens,  b_tens,  column_sum_tens,  carry_units, carry_tens]
+  ans_hundreds:     [a, b, carry_tens]
+  # Intermediate per-column quantities
+  column_sum_units: [a_units, b_units]
+  column_sum_tens:  [a_tens,  b_tens]
+  carry_units:      [a_units, b_units, column_sum_units]
+  carry_tens:       [a_tens,  b_tens,  column_sum_tens, carry_units]
+  running_sum_units: [a_units, b_units]
+  running_sum_tens:  [a_tens,  b_tens, running_sum_units, carry_units]
+  # Composite operand functions
+  max_operand:       [a, b]
+  min_operand:       [a, b]
+  operand_diff:      [a, b]
+  operand_abs_diff:  [a, b]
+
+multiplication:
+  a:           [a_units, a_tens]
+  b:           [b_units, b_tens]
+  a_units:     [a]
+  a_tens:      [a]
+  b_units:     [b]
+  b_tens:      [b]
+  answer:      [a, b]
+  # Digit-level answer pieces
+  ans_units:        [a, b, a_units, b_units, partial_product_units,
+                       column_sum_units, carry_units]
+  ans_tens:         [a, b, a_tens,  b_tens,  partial_product_a_units_b_tens,
+                       partial_product_a_tens_b_units, column_sum_tens,
+                       carry_units, carry_tens]
+  ans_hundreds:     [a, b, partial_product_a_tens_b_tens, column_sum_hundreds,
+                       carry_tens]
+  # Partial products are *atomic* digit-pair products; their correlates are
+  # the input digits they're built from.
+  partial_product_units:           [a_units, b_units]
+  partial_product_a_units_b_tens:  [a_units, b_tens]
+  partial_product_a_tens_b_units:  [a_tens,  b_units]
+  partial_product_a_tens_b_tens:   [a_tens,  b_tens]
+  # Column sums and carries derive from partial products
+  column_sum_units:     [partial_product_units]
+  column_sum_tens:      [partial_product_a_units_b_tens,
+                          partial_product_a_tens_b_units]
+  column_sum_hundreds:  [partial_product_a_tens_b_tens]
+  carry_units:          [column_sum_units, partial_product_units]
+  carry_tens:           [column_sum_tens,  carry_units]
+  running_sum_units:    [partial_product_units]
+  running_sum_tens:     [partial_product_a_units_b_tens,
+                          partial_product_a_tens_b_units,
+                          running_sum_units, carry_units]
+  running_sum_hundreds: [partial_product_a_tens_b_tens,
+                          running_sum_tens, carry_tens]
+  max_operand:       [a, b]
+  min_operand:       [a, b]
+  operand_diff:      [a, b]
+  operand_abs_diff:  [a, b]

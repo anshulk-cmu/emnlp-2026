@@ -2,6 +2,7 @@
 # 51 GB of model weights, activations, intermediate results, and figures.
 # Never push.
 data
+paper-draft
 
 # Python
 __pycache__/

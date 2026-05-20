@@ -47,11 +47,16 @@ $PYTHON -c "import ripser; print(f'ripser={ripser.__version__}')" 2>&1 | head -1
   echo "[warn] ripser not installed; PH module will use the gudhi fallback or report status=no_ph_lib"
 
 # Single worker per array task processes its hashed cell stripe.
+# --rebalance-incomplete: distribute the REMAINING (incomplete) cells evenly
+# across stripes by sorted-index. Use this when relaunching a partial sweep
+# so the work stays balanced regardless of the original hash striping.
 $PYTHON stage2c_gplvm.py \
     --config "$CONFIG" \
     --model "$MODEL" \
+    --mode all \
     --sweep all \
     --array-task "$ARRAY_IDX" \
-    --array-size "$ARRAY_SIZE"
+    --array-size "$ARRAY_SIZE" \
+    --rebalance-incomplete
 
 echo "[$(date)] done array_task=$ARRAY_IDX"

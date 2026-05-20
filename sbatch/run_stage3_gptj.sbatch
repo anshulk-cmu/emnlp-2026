@@ -1,16 +1,20 @@
 #!/bin/bash
 # =============================================================================
-# Stage 4 causal — Llama 3.1 8B, PREEMPT partition, 4 array tasks, any GPU.
-# Llama goes to preempt while GPT-J + Pythia share the general 8-GPU cap.
-# Resume-by-stage4_results.json makes mid-run restarts cheap.
+# Stage 3 — Ownership test, GPT-J 6B (general partition).
+#
+# Per BSMI-R cell with a declared shape: orthogonalise the union basis B_u
+# against the pre-registered correlate concepts (configs/stage3.yaml), then
+# re-run BSMI-R evidence on Y_orth with alpha and P_hat LOCKED to the raw
+# cell's values so log Z numbers are apples-to-apples comparable.
+#
+# 4 array tasks (each task processes its hashed cell stripe).
 # =============================================================================
 
-#SBATCH --job-name=emnlp_stage4_llama
-#SBATCH --output=/data/user_data/anshulk/emnlp2026/logs/slurm-stage4-llama-%A_%a.out
-#SBATCH --error=/data/user_data/anshulk/emnlp2026/logs/slurm-stage4-llama-%A_%a.err
-#SBATCH --partition=preempt
-#SBATCH --qos=preempt_qos
-#SBATCH --gres=gpu:1
+#SBATCH --job-name=emnlp_stage3_gptj
+#SBATCH --output=/data/user_data/anshulk/emnlp2026/logs/slurm-stage3-gptj-%A_%a.out
+#SBATCH --error=/data/user_data/anshulk/emnlp2026/logs/slurm-stage3-gptj-%A_%a.err
+#SBATCH --partition=general
+#SBATCH --gres=gpu:A6000:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=2-00:00:00
@@ -19,10 +23,12 @@
 #SBATCH --mail-user=anshulk@andrew.cmu.edu
 
 set -euo pipefail
+
 ARRAY_SIZE=4
 ARRAY_IDX=$SLURM_ARRAY_TASK_ID
 CONFIG=/home/anshulk/emnlp2026/config.yaml
-MODEL=llama-3.1-8b
+STAGE3_CFG=/home/anshulk/emnlp2026/configs/stage3.yaml
+MODEL=gpt-j-6b
 
 echo "[$(date)] array_task=$ARRAY_IDX of $ARRAY_SIZE host=$(hostname) gpu=${CUDA_VISIBLE_DEVICES:-?}"
 nvidia-smi --query-gpu=name,memory.total,memory.free,driver_version --format=csv,noheader || true
@@ -32,11 +38,13 @@ conda activate geometry
 cd /home/anshulk/emnlp2026
 
 PYTHON=/data/user_data/anshulk/miniconda3/envs/geometry/bin/python
+echo "[$(date)] PYTHON=$PYTHON"
 $PYTHON --version
-$PYTHON -c "import torch, transformers; print(f'torch={torch.__version__} transformers={transformers.__version__}')"
+$PYTHON -c "import numpy, pandas, sklearn; print(f'numpy={numpy.__version__} pandas={pandas.__version__} sklearn={sklearn.__version__}')"
 
-$PYTHON causal_validation.py \
+$PYTHON stage3_ownership.py \
     --config "$CONFIG" \
+    --stage3-config "$STAGE3_CFG" \
     --model "$MODEL" \
     --mode all \
     --sweep all \
